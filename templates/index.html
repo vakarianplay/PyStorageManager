@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Склад - Просмотр</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-row">
+            <h1>📦 Склад - Просмотр объектов</h1>
+            <a href="/add" class="btn btn-primary">+ Добавить</a>
+        </div>
+        <div id="loading">Загрузка данных...</div>
+        <div id="objects-list"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', loadObjects);
+
+        async function loadObjects() {
+            const loadingDiv = document.getElementById('loading');
+            const listDiv = document.getElementById('objects-list');
+
+            try {
+                const response = await fetch('/api/objects');
+                const objects = await response.json();
+
+                loadingDiv.style.display = 'none';
+
+                if (objects.length === 0) {
+                    listDiv.innerHTML = '<p class="no-data">Нет объектов на складе</p>';
+                    return;
+                }
+
+                listDiv.innerHTML = objects.map(createObjectRow).join('');
+            } catch (error) {
+                loadingDiv.textContent = 'Ошибка загрузки: ' + error.message;
+            }
+        }
+
+        function createObjectRow(obj) {
+            const balanceClass = obj.balance > 0 ? 'positive' : (obj.balance < 0 ? 'negative' : 'zero');
+
+            return `
+                <div class="object-card" id="object-${obj.id}">
+                    <div class="object-header" onclick="toggleDetails(${obj.id})">
+                        <div class="object-name">
+                            <span class="expand-icon" id="icon-${obj.id}">▶</span>
+                            ${obj.objectname}
+                        </div>
+                        <div class="object-stats">
+                            <span class="stat">
+                                <label>Поступило:</label>
+                                <value>${obj.amount}</value>
+                            </span>
+                            <span class="stat">
+                                <label>Списано:</label>
+                                <value>${obj.write_off}</value>
+                            </span>
+                            <span class="stat ${balanceClass}">
+                                <label>Остаток:</label>
+                                <value>${obj.balance}</value>
+                            </span>
+                        </div>
+                    </div>
+                    <div class="object-details" id="details-${obj.id}" style="display: none;">
+                        <div class="details-loading">Загрузка...</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function toggleDetails(objectId) {
+            const detailsDiv = document.getElementById(`details-${objectId}`);
+            const icon = document.getElementById(`icon-${objectId}`);
+
+            if (detailsDiv.style.display === 'none') {
+                detailsDiv.style.display = 'block';
+                icon.textContent = '▼';
+
+                if (detailsDiv.querySelector('.details-loading')) {
+                    await loadObjectDetails(objectId);
+                }
+            } else {
+                detailsDiv.style.display = 'none';
+                icon.textContent = '▶';
+            }
+        }
+
+        async function loadObjectDetails(objectId) {
+            const detailsDiv = document.getElementById(`details-${objectId}`);
+
+            try {
+                const response = await fetch(`/api/object_details?id=${objectId}`);
+                const details = await response.json();
+
+                detailsDiv.innerHTML = renderReceipts(details.receipts) + renderWriteoffs(details.writeoffs);
+            } catch (error) {
+                detailsDiv.innerHTML = '<p class="error">Ошибка загрузки: ' + error.message + '</p>';
+            }
+        }
+
+        function createFileLink(type, id, number) {
+            if (!id || !number) return '-';
+            return `<a href="/api/file/${type}/${id}" target="_blank">${number}</a>`;
+        }
+
+        function renderReceipts(receipts) {
+            let html = '<div class="section"><h3>📥 Поступления</h3>';
+
+            if (receipts.length === 0) {
+                return html + '<p class="no-data">Нет поступлений</p></div>';
+            }
+
+            html += `
+                <table class="details-table">
+                    <tr>
+                        <th>Название</th>
+                        <th>Наименование</th>
+                        <th>Кол-во</th>
+                        <th>Поставщик</th>
+                        <th>Тема</th>
+                        <th>Счёт</th>
+                        <th>Дата счёта</th>
+                        <th>Накладная</th>
+                        <th>Дата накладной</th>
+                        <th>Вх. контроль</th>
+                        <th>Дата вх. контроля</th>
+                        <th>Место</th>
+                    </tr>
+            `;
+
+            for (const r of receipts) {
+                html += `
+                    <tr>
+                        <td>${r.object_name || '-'}</td>
+                        <td>${r.sellerobjectname || '-'}</td>
+                        <td>${r.quantity}</td>
+                        <td>${r.seller_name || '-'}</td>
+                        <td>${r.theme_name || '-'}</td>
+                        <td>${createFileLink('bill', r.bill_id, r.bill_number)}</td>
+                        <td>${r.bill_date || '-'}</td>
+                        <td>${createFileLink('invoice', r.invoice_id, r.invoice_number)}</td>
+                        <td>${r.invoice_date || '-'}</td>
+                        <td>${createFileLink('entry_control', r.entry_control_id, r.entry_control_number)}</td>
+                        <td>${r.entry_control_date || '-'}</td>
+                        <td>${r.location || '-'}</td>
+                    </tr>
+                `;
+            }
+
+            return html + '</table></div>';
+        }
+
+        function renderWriteoffs(writeoffs) {
+            let html = '<div class="section"><h3>📤 Списания</h3>';
+
+            if (writeoffs.length === 0) {
+                return html + '<p class="no-data">Нет списаний</p></div>';
+            }
+
+            html += `
+                <table class="details-table">
+                    <tr>
+                        <th>Название</th>
+                        <th>Кол-во</th>
+                        <th>Тема списания</th>
+                    </tr>
+            `;
+
+            for (const w of writeoffs) {
+                html += `
+                    <tr>
+                        <td>${w.object_name || '-'}</td>
+                        <td>${w.quantity}</td>
+                        <td>${w.theme_name || '-'}</td>
+                    </tr>
+                `;
+            }
+
+            return html + '</table></div>';
+        }
+    </script>
+</body>
+</html>

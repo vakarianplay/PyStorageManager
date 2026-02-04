@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Склад - Добавление</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-row">
+            <h1>📦 Добавление записей</h1>
+            <a href="/" class="btn btn-secondary">← Назад</a>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('receipt')">Поступление</button>
+            <button class="tab" onclick="showTab('writeoff')">Списание</button>
+            <button class="tab" onclick="showTab('object')">Объект</button>
+            <button class="tab" onclick="showTab('seller')">Поставщик</button>
+            <button class="tab" onclick="showTab('theme')">Тема</button>
+        </div>
+
+        <div id="tab-receipt" class="tab-content active">
+            <form id="receipt-form" class="form-card">
+                <h3>Новое поступление</h3>
+
+                <div class="form-group">
+                    <label>Объект на складе</label>
+                    <select id="objectId" name="objectId">
+                        <option value="">-- Выберите или создайте новый --</option>
+                    </select>
+                    <input type="text" id="newObjectName" name="newObjectName" placeholder="Или введите новый объект">
+                </div>
+
+                <div class="form-group">
+                    <label>Наименование у поставщика</label>
+                    <input type="text" name="sellerObjectName" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Количество</label>
+                    <input type="number" name="quantity" min="1" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Поставщик</label>
+                    <select id="sellerId" name="sellerId">
+                        <option value="">-- Выберите или создайте нового --</option>
+                    </select>
+                    <div class="new-seller-fields" style="display: none;">
+                        <input type="text" name="newSellerName" placeholder="Название компании">
+                        <input type="text" name="newSellerInn" placeholder="ИНН">
+                        <input type="text" name="newSellerKpp" placeholder="КПП">
+                    </div>
+                    <button type="button" class="btn btn-small" onclick="toggleNewSeller()">+ Новый поставщик</button>
+                </div>
+
+                <div class="form-group">
+                    <label>Тема</label>
+                    <select id="themeId" name="themeId">
+                        <option value="">-- Выберите или создайте новую --</option>
+                    </select>
+                    <input type="text" name="newThemeName" placeholder="Или введите новую тему">
+                </div>
+
+                <div class="form-group">
+                    <label>Счёт (номер и файл)</label>
+                    <input type="text" name="billNumber" placeholder="Номер счёта" required>
+                    <input type="date" name="billDate" required>
+                    <input type="file" name="billFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                </div>
+
+                <div class="form-group">
+                    <label>Накладная (номер и файл)</label>
+                    <input type="text" name="invoiceNumber" placeholder="Номер накладной" required>
+                    <input type="date" name="invoiceDate" required>
+                    <input type="file" name="invoiceFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                </div>
+
+                <div class="form-group">
+                    <label>Входной контроль (номер и файл)</label>
+                    <input type="text" name="entryControlNumber" placeholder="Номер" required>
+                    <input type="date" name="entryControlDate" required>
+                    <input type="file" name="entryControlFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                </div>
+
+                <div class="form-group">
+                    <label>Место хранения</label>
+                    <input type="text" name="location" placeholder="Склад А">
+                </div>
+
+                <button type="submit" class="btn btn-primary">Сохранить поступление</button>
+            </form>
+        </div>
+
+        <div id="tab-writeoff" class="tab-content">
+            <form id="writeoff-form" class="form-card">
+                <h3>Новое списание</h3>
+
+                <div class="form-group">
+                    <label>Объект на складе</label>
+                    <select id="writeoffObjectId" name="objectId" required>
+                        <option value="">-- Выберите объект --</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Тема списания</label>
+                    <select id="writeoffThemeId" name="themeId">
+                        <option value="">-- Выберите или создайте новую --</option>
+                    </select>
+                    <input type="text" name="newThemeName" placeholder="Или введите новую тему">
+                </div>
+
+                <div class="form-group">
+                    <label>Количество</label>
+                    <input type="number" name="quantity" min="1" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Сохранить списание</button>
+            </form>
+        </div>
+
+        <div id="tab-object" class="tab-content">
+            <form id="object-form" class="form-card">
+                <h3>Новый объект на складе</h3>
+
+                <div class="form-group">
+                    <label>Наименование объекта</label>
+                    <input type="text" name="objectName" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Создать объект</button>
+            </form>
+        </div>
+
+        <div id="tab-seller" class="tab-content">
+            <form id="seller-form" class="form-card">
+                <h3>Новый поставщик</h3>
+
+                <div class="form-group">
+                    <label>Название компании</label>
+                    <input type="text" name="name" required>
+                </div>
+
+                <div class="form-group">
+                    <label>ИНН</label>
+                    <input type="text" name="inn" required>
+                </div>
+
+                <div class="form-group">
+                    <label>КПП</label>
+                    <input type="text" name="kpp" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Создать поставщика</button>
+            </form>
+        </div>
+
+        <div id="tab-theme" class="tab-content">
+            <form id="theme-form" class="form-card">
+                <h3>Новая тема</h3>
+
+                <div class="form-group">
+                    <label>Название темы</label>
+                    <input type="text" name="name" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Создать тему</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно -->
+    <div id="modal-overlay" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon" id="modal-icon">✓</div>
+            <div class="modal-title" id="modal-title">Успешно!</div>
+            <div class="modal-message" id="modal-message"></div>
+            <button class="btn btn-primary modal-btn" onclick="closeModal()">OK</button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSelectors();
+            setupForms();
+        });
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        function toggleNewSeller() {
+            const fields = document.querySelector('.new-seller-fields');
+            fields.style.display = fields.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function loadSelectors() {
+            const [objects, sellers, themes] = await Promise.all([
+                fetch('/api/objects').then(r => r.json()),
+                fetch('/api/sellers').then(r => r.json()),
+                fetch('/api/themes').then(r => r.json())
+            ]);
+
+            populateSelect('objectId', objects, 'id', 'objectname');
+            populateSelect('writeoffObjectId', objects, 'id', 'objectname');
+            populateSelect('sellerId', sellers, 'id', 'name');
+            populateSelect('themeId', themes, 'id', 'name');
+            populateSelect('writeoffThemeId', themes, 'id', 'name');
+        }
+
+        function populateSelect(selectId, items, valueKey, textKey) {
+            const select = document.getElementById(selectId);
+            if (!select) return;
+
+            const currentValue = select.value;
+            const firstOption = select.querySelector('option');
+
+            select.innerHTML = '';
+            if (firstOption) select.appendChild(firstOption);
+
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item[valueKey];
+                option.textContent = item[textKey];
+                select.appendChild(option);
+            });
+
+            select.value = currentValue;
+        }
+
+        function setupForms() {
+            document.getElementById('receipt-form').addEventListener('submit', e => {
+                e.preventDefault();
+                submitForm('/api/receipt', new FormData(e.target), e.target);
+            });
+
+            document.getElementById('writeoff-form').addEventListener('submit', e => {
+                e.preventDefault();
+                submitForm('/api/writeoff', new FormData(e.target), e.target);
+            });
+
+            document.getElementById('object-form').addEventListener('submit', e => {
+                e.preventDefault();
+                submitForm('/api/object', new FormData(e.target), e.target);
+            });
+
+            document.getElementById('seller-form').addEventListener('submit', e => {
+                e.preventDefault();
+                submitForm('/api/seller', new FormData(e.target), e.target);
+            });
+
+            document.getElementById('theme-form').addEventListener('submit', e => {
+                e.preventDefault();
+                submitForm('/api/theme', new FormData(e.target), e.target);
+            });
+        }
+
+        async function submitForm(url, formData, form) {
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    showModal(false, 'Ошибка', result.error);
+                } else {
+                    showModal(true, 'Успешно!', result.message);
+                    form.reset();
+                    loadSelectors();
+                }
+            } catch (error) {
+                showModal(false, 'Ошибка', error.message);
+            }
+        }
+
+        function showModal(success, title, message) {
+            const overlay = document.getElementById('modal-overlay');
+            const icon = document.getElementById('modal-icon');
+            const titleEl = document.getElementById('modal-title');
+            const messageEl = document.getElementById('modal-message');
+
+            icon.textContent = success ? '✓' : '✗';
+            icon.className = 'modal-icon ' + (success ? 'success' : 'error');
+            titleEl.textContent = title;
+            messageEl.textContent = message;
+
+            overlay.classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('modal-overlay').classList.remove('active');
+        }
+
+        document.getElementById('modal-overlay').addEventListener('click', e => {
+            if (e.target.classList.contains('modal-overlay')) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>
