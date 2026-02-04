@@ -1,0 +1,10 @@
+database:
+  host: localhost
+  port: 5432
+  name: StorageManager
+  user: postgres
+  password: postgres
+
+server:
+  host: localhost
+  port: 8080
