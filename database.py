@@ -93,11 +93,18 @@ class Database:
             SELECT 
                 w.id,
                 o.objectName AS object_name,
+                r.sellerObjectName AS seller_object_name,
                 w.quantity,
                 t.name AS theme_name
             FROM WriteOff w
             LEFT JOIN ObjectsStorage o ON w.objectID = o.id
             LEFT JOIN Themes t ON w.themeID = t.id
+            LEFT JOIN LATERAL (
+                SELECT sellerObjectName 
+                FROM Receipt 
+                WHERE objectID = w.objectID 
+                LIMIT 1
+            ) r ON true
             WHERE w.objectID = %s
             ORDER BY w.id DESC
         """, (object_id,), fetch=True)
