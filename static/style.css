@@ -17,6 +17,10 @@ body {
     padding: 20px;
 }
 
+/* =====================
+   HEADER
+   ===================== */
+
 .header-row {
     display: flex;
     justify-content: space-between;
@@ -24,9 +28,18 @@ body {
     margin-bottom: 30px;
 }
 
+.header-buttons {
+    display: flex;
+    gap: 10px;
+}
+
 h1 {
     color: #2c3e50;
 }
+
+/* =====================
+   BUTTONS
+   ===================== */
 
 .btn {
     display: inline-block;
@@ -37,6 +50,15 @@ h1 {
     cursor: pointer;
     border: none;
     font-size: 14px;
+    transition: background-color 0.2s, transform 0.1s;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn:active {
+    transform: translateY(0);
 }
 
 .btn-primary {
@@ -57,11 +79,41 @@ h1 {
     background-color: #7f8c8d;
 }
 
+.btn-danger {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.btn-danger:hover {
+    background-color: #c0392b;
+}
+
 .btn-small {
     padding: 5px 10px;
     font-size: 12px;
-    margin-top: 5px;
 }
+
+.btn-edit {
+    background-color: #3498db;
+    color: white;
+}
+
+.btn-edit:hover {
+    background-color: #2980b9;
+}
+
+.btn-delete {
+    background-color: #e74c3c;
+    color: white;
+}
+
+.btn-delete:hover {
+    background-color: #c0392b;
+}
+
+/* =====================
+   LOADING
+   ===================== */
 
 #loading {
     text-align: center;
@@ -69,6 +121,10 @@ h1 {
     font-size: 18px;
     color: #666;
 }
+
+/* =====================
+   OBJECT CARDS
+   ===================== */
 
 .object-card {
     background: #fff;
@@ -101,6 +157,7 @@ h1 {
     display: inline-block;
     width: 20px;
     color: #666;
+    transition: transform 0.2s;
 }
 
 .object-stats {
@@ -125,9 +182,21 @@ h1 {
     font-weight: bold;
 }
 
-.stat.positive value { color: #27ae60; }
-.stat.negative value { color: #e74c3c; }
-.stat.zero value { color: #95a5a6; }
+.stat.positive value {
+    color: #27ae60;
+}
+
+.stat.negative value {
+    color: #e74c3c;
+}
+
+.stat.zero value {
+    color: #95a5a6;
+}
+
+/* =====================
+   OBJECT DETAILS
+   ===================== */
 
 .object-details {
     border-top: 1px solid #eee;
@@ -149,6 +218,10 @@ h1 {
     font-size: 16px;
 }
 
+/* =====================
+   TABLES
+   ===================== */
+
 .details-table {
     width: 100%;
     border-collapse: collapse;
@@ -166,6 +239,7 @@ h1 {
     background-color: #ecf0f1;
     font-weight: 600;
     color: #2c3e50;
+    white-space: nowrap;
 }
 
 .details-table tr:hover {
@@ -180,6 +254,32 @@ h1 {
 .details-table a:hover {
     text-decoration: underline;
 }
+
+.manage-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.manage-table th,
+.manage-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.manage-table th {
+    background-color: #ecf0f1;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.manage-table tr:hover {
+    background-color: #f5f5f5;
+}
+
+/* =====================
+   NO DATA / ERROR
+   ===================== */
 
 .no-data {
     color: #999;
@@ -200,10 +300,15 @@ h1 {
     color: #666;
 }
 
+/* =====================
+   TABS
+   ===================== */
+
 .tabs {
     display: flex;
     gap: 5px;
     margin-bottom: 20px;
+    flex-wrap: wrap;
 }
 
 .tab {
@@ -213,6 +318,11 @@ h1 {
     cursor: pointer;
     border-radius: 6px 6px 0 0;
     font-size: 14px;
+    transition: background-color 0.2s;
+}
+
+.tab:hover {
+    background-color: #d5dbdb;
 }
 
 .tab.active {
@@ -227,6 +337,10 @@ h1 {
 .tab-content.active {
     display: block;
 }
+
+/* =====================
+   FORMS
+   ===================== */
 
 .form-card {
     background: #fff;
@@ -252,19 +366,26 @@ h1 {
 }
 
 .form-group input,
-.form-group select {
+.form-group select,
+.form-group textarea {
     width: 100%;
     padding: 10px;
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
     margin-bottom: 5px;
+    transition: border-color 0.2s;
 }
 
 .form-group input:focus,
-.form-group select:focus {
+.form-group select:focus,
+.form-group textarea:focus {
     outline: none;
     border-color: #3498db;
+}
+
+.form-group input[type="file"] {
+    padding: 8px;
 }
 
 .new-seller-fields {
@@ -274,50 +395,10 @@ h1 {
     border-radius: 4px;
 }
 
-.message {
-    display: none;
-    padding: 15px;
-    border-radius: 4px;
-    margin-top: 20px;
-    font-weight: 600;
-}
+/* =====================
+   MODAL OVERLAY
+   ===================== */
 
-.message.success {
-    background-color: #d4edda;
-    color: #155724;
-}
-
-.message.error {
-    background-color: #f8d7da;
-    color: #721c24;
-}
-
-@media (max-width: 768px) {
-    .object-header {
-        flex-direction: column;
-        gap: 15px;
-    }
-
-    .object-stats {
-        width: 100%;
-        justify-content: space-around;
-    }
-
-    .details-table {
-        font-size: 12px;
-    }
-
-    .details-table th,
-    .details-table td {
-        padding: 6px 8px;
-    }
-
-    .tabs {
-        flex-wrap: wrap;
-    }
-}
-
-/* Модальное окно */
 .modal-overlay {
     display: none;
     position: fixed;
@@ -335,6 +416,10 @@ h1 {
     display: flex;
 }
 
+/* =====================
+   MODAL
+   ===================== */
+
 .modal {
     background: white;
     padding: 40px 50px;
@@ -344,6 +429,17 @@ h1 {
     width: 90%;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
     animation: modalAppear 0.3s ease;
+}
+
+.modal-edit {
+    max-width: 500px;
+    text-align: left;
+}
+
+.modal-edit h3 {
+    margin-bottom: 20px;
+    color: #2c3e50;
+    text-align: center;
 }
 
 @keyframes modalAppear {
@@ -396,4 +492,201 @@ h1 {
     min-width: 120px;
     padding: 12px 30px;
     font-size: 16px;
+}
+
+.modal-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+
+/* =====================
+   MESSAGE (OLD STYLE)
+   ===================== */
+
+.message {
+    display: none;
+    padding: 15px;
+    border-radius: 4px;
+    margin-top: 20px;
+    font-weight: 600;
+}
+
+.message.success {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.message.error {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* =====================
+   RESPONSIVE
+   ===================== */
+
+@media (max-width: 1200px) {
+    .container {
+        max-width: 100%;
+        padding: 15px;
+    }
+
+    .details-table {
+        font-size: 12px;
+    }
+
+    .details-table th,
+    .details-table td {
+        padding: 8px 6px;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-row {
+        flex-direction: column;
+        gap: 15px;
+        text-align: center;
+    }
+
+    .header-buttons {
+        justify-content: center;
+    }
+
+    .object-header {
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .object-stats {
+        width: 100%;
+        justify-content: space-around;
+    }
+
+    .details-table {
+        font-size: 11px;
+    }
+
+    .details-table th,
+    .details-table td {
+        padding: 6px 4px;
+    }
+
+    .tabs {
+        flex-wrap: wrap;
+    }
+
+    .tab {
+        flex: 1;
+        min-width: 80px;
+        text-align: center;
+    }
+
+    .modal {
+        padding: 30px 20px;
+        margin: 10px;
+    }
+
+    .modal-title {
+        font-size: 22px;
+    }
+
+    .modal-icon {
+        width: 60px;
+        height: 60px;
+        font-size: 30px;
+    }
+
+    .form-card {
+        padding: 15px;
+    }
+
+    .btn {
+        padding: 8px 16px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 480px) {
+    h1 {
+        font-size: 20px;
+    }
+
+    .object-name {
+        font-size: 16px;
+    }
+
+    .stat value {
+        font-size: 16px;
+    }
+
+    .stat label {
+        font-size: 10px;
+    }
+
+    .details-table {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .modal-buttons {
+        flex-direction: column;
+    }
+
+    .modal-buttons .btn {
+        width: 100%;
+    }
+}
+
+/* =====================
+   SCROLLBAR STYLING
+   ===================== */
+
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+}
+
+/* =====================
+   PRINT STYLES
+   ===================== */
+
+@media print {
+    .header-buttons,
+    .btn-edit,
+    .btn-delete,
+    .tabs,
+    .modal-overlay {
+        display: none !important;
+    }
+
+    .object-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+
+    .object-details {
+        display: block !important;
+    }
+
+    body {
+        background: white;
+    }
 }

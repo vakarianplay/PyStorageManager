@@ -10,14 +10,134 @@
     <div class="container">
         <div class="header-row">
             <h1>📦 Склад - Просмотр объектов</h1>
-            <a href="/add" class="btn btn-primary">+ Добавить</a>
+            <div class="header-buttons">
+                <a href="/add" class="btn btn-primary">+ Добавить</a>
+                <a href="/manage" class="btn btn-secondary">⚙️ Управление</a>
+            </div>
         </div>
         <div id="loading">Загрузка данных...</div>
         <div id="objects-list"></div>
     </div>
 
+    <!-- Модальное окно редактирования поступления -->
+    <div id="edit-receipt-modal" class="modal-overlay">
+        <div class="modal modal-edit">
+            <h3>Редактирование поступления</h3>
+            <form id="edit-receipt-form">
+                <input type="hidden" id="receipt-id" name="id">
+                <div class="form-group">
+                    <label>Объект</label>
+                    <select id="receipt-object-id" name="objectId" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Наименование у поставщика</label>
+                    <input type="text" id="receipt-seller-object-name" name="sellerObjectName" required>
+                </div>
+                <div class="form-group">
+                    <label>Количество</label>
+                    <input type="number" id="receipt-quantity" name="quantity" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Поставщик</label>
+                    <select id="receipt-seller-id" name="sellerId" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Тема</label>
+                    <select id="receipt-theme-id" name="themeId" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Место хранения</label>
+                    <input type="text" id="receipt-location" name="location">
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeReceiptModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования списания -->
+    <div id="edit-writeoff-modal" class="modal-overlay">
+        <div class="modal modal-edit">
+            <h3>Редактирование списания</h3>
+            <form id="edit-writeoff-form">
+                <input type="hidden" id="writeoff-id" name="id">
+                <div class="form-group">
+                    <label>Объект</label>
+                    <select id="writeoff-object-id" name="objectId" required></select>
+                </div>
+                <div class="form-group">
+                    <label>Количество</label>
+                    <input type="number" id="writeoff-quantity" name="quantity" min="1" required>
+                </div>
+                <div class="form-group">
+                    <label>Тема списания</label>
+                    <select id="writeoff-theme-id" name="themeId" required></select>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeWriteoffModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <div id="delete-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon error">!</div>
+            <div class="modal-title">Подтверждение удаления</div>
+            <div class="modal-message" id="delete-message"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger" id="confirm-delete-btn">Удалить</button>
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно сообщения -->
+    <div id="message-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon" id="message-icon">✓</div>
+            <div class="modal-title" id="message-title">Успешно!</div>
+            <div class="modal-message" id="message-text"></div>
+            <button class="btn btn-primary modal-btn" onclick="closeMessageModal()">OK</button>
+        </div>
+    </div>
+
     <script>
-        document.addEventListener('DOMContentLoaded', loadObjects);
+        let objectsCache = [];
+        let sellersCache = [];
+        let themesCache = [];
+        let currentDeleteType = '';
+        let currentDeleteId = null;
+        let currentObjectId = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadObjects();
+            loadSelectorsData();
+            document.getElementById('edit-receipt-form').addEventListener('submit', handleReceiptSubmit);
+            document.getElementById('edit-writeoff-form').addEventListener('submit', handleWriteoffSubmit);
+        });
+
+        async function loadSelectorsData() {
+            const [objects, sellers, themes] = await Promise.all([
+                fetch('/api/objects').then(r => r.json()),
+                fetch('/api/sellers').then(r => r.json()),
+                fetch('/api/themes').then(r => r.json())
+            ]);
+            objectsCache = objects;
+            sellersCache = sellers;
+            themesCache = themes;
+        }
+
+        function populateSelect(selectId, items, valueKey, textKey, selectedValue = null) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = items.map(item => 
+                `<option value="${item[valueKey]}" ${item[valueKey] == selectedValue ? 'selected' : ''}>${item[textKey]}</option>`
+            ).join('');
+        }
 
         async function loadObjects() {
             const loadingDiv = document.getElementById('loading');
@@ -41,6 +161,7 @@
         }
 
         function createObjectRow(obj) {
+            const name = obj.objectname || obj.object_name || 'Без названия';
             const balanceClass = obj.balance > 0 ? 'positive' : (obj.balance < 0 ? 'negative' : 'zero');
 
             return `
@@ -48,7 +169,7 @@
                     <div class="object-header" onclick="toggleDetails(${obj.id})">
                         <div class="object-name">
                             <span class="expand-icon" id="icon-${obj.id}">▶</span>
-                            ${obj.objectname}
+                            ${name}
                         </div>
                         <div class="object-stats">
                             <span class="stat">
@@ -79,10 +200,8 @@
             if (detailsDiv.style.display === 'none') {
                 detailsDiv.style.display = 'block';
                 icon.textContent = '▼';
-
-                if (detailsDiv.querySelector('.details-loading')) {
-                    await loadObjectDetails(objectId);
-                }
+                currentObjectId = objectId;
+                await loadObjectDetails(objectId);
             } else {
                 detailsDiv.style.display = 'none';
                 icon.textContent = '▶';
@@ -129,6 +248,7 @@
                         <th>Вх. контроль</th>
                         <th>Дата вх. контроля</th>
                         <th>Место</th>
+                        <th>Действия</th>
                     </tr>
             `;
 
@@ -147,6 +267,10 @@
                         <td>${createFileLink('entry_control', r.entry_control_id, r.entry_control_number)}</td>
                         <td>${r.entry_control_date || '-'}</td>
                         <td>${r.location || '-'}</td>
+                        <td>
+                            <button class="btn btn-small btn-edit" onclick="editReceipt(${r.id})">✏️</button>
+                            <button class="btn btn-small btn-delete" onclick="confirmDeleteReceipt(${r.id})">🗑️</button>
+                        </td>
                     </tr>
                 `;
             }
@@ -168,6 +292,7 @@
                         <th>Наименование</th>
                         <th>Кол-во</th>
                         <th>Тема списания</th>
+                        <th>Действия</th>
                     </tr>
             `;
 
@@ -178,11 +303,159 @@
                         <td>${w.seller_object_name || '-'}</td>
                         <td>${w.quantity}</td>
                         <td>${w.theme_name || '-'}</td>
+                        <td>
+                            <button class="btn btn-small btn-edit" onclick="editWriteoff(${w.id})">✏️</button>
+                            <button class="btn btn-small btn-delete" onclick="confirmDeleteWriteoff(${w.id})">🗑️</button>
+                        </td>
                     </tr>
                 `;
             }
 
             return html + '</table></div>';
+        }
+
+        async function editReceipt(id) {
+            const response = await fetch(`/api/receipt?id=${id}`);
+            const receipt = await response.json();
+
+            document.getElementById('receipt-id').value = receipt.id;
+            populateSelect('receipt-object-id', objectsCache, 'id', 'objectname', receipt.object_id);
+            document.getElementById('receipt-seller-object-name').value = receipt.seller_object_name || '';
+            document.getElementById('receipt-quantity').value = receipt.quantity;
+            populateSelect('receipt-seller-id', sellersCache, 'id', 'name', receipt.seller_id);
+            populateSelect('receipt-theme-id', themesCache, 'id', 'name', receipt.theme_id);
+            document.getElementById('receipt-location').value = receipt.location || '';
+
+            document.getElementById('edit-receipt-modal').classList.add('active');
+        }
+
+        async function handleReceiptSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+
+            try {
+                const response = await fetch('/api/receipt', {
+                    method: 'PUT',
+                    body: formData
+                });
+                const result = await response.json();
+
+                closeReceiptModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    loadObjects();
+                    if (currentObjectId) {
+                        setTimeout(() => loadObjectDetails(currentObjectId), 100);
+                    }
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closeReceiptModal() {
+            document.getElementById('edit-receipt-modal').classList.remove('active');
+        }
+
+        async function editWriteoff(id) {
+            const response = await fetch(`/api/writeoff?id=${id}`);
+            const writeoff = await response.json();
+
+            document.getElementById('writeoff-id').value = writeoff.id;
+            populateSelect('writeoff-object-id', objectsCache, 'id', 'objectname', writeoff.object_id);
+            document.getElementById('writeoff-quantity').value = writeoff.quantity;
+            populateSelect('writeoff-theme-id', themesCache, 'id', 'name', writeoff.theme_id);
+
+            document.getElementById('edit-writeoff-modal').classList.add('active');
+        }
+
+        async function handleWriteoffSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+
+            try {
+                const response = await fetch('/api/writeoff', {
+                    method: 'PUT',
+                    body: formData
+                });
+                const result = await response.json();
+
+                closeWriteoffModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    loadObjects();
+                    if (currentObjectId) {
+                        setTimeout(() => loadObjectDetails(currentObjectId), 100);
+                    }
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closeWriteoffModal() {
+            document.getElementById('edit-writeoff-modal').classList.remove('active');
+        }
+
+        function confirmDeleteReceipt(id) {
+            currentDeleteType = 'receipt';
+            currentDeleteId = id;
+            document.getElementById('delete-message').textContent = 'Вы уверены, что хотите удалить это поступление?';
+            document.getElementById('confirm-delete-btn').onclick = executeDelete;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        function confirmDeleteWriteoff(id) {
+            currentDeleteType = 'writeoff';
+            currentDeleteId = id;
+            document.getElementById('delete-message').textContent = 'Вы уверены, что хотите удалить это списание?';
+            document.getElementById('confirm-delete-btn').onclick = executeDelete;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        async function executeDelete() {
+            try {
+                const response = await fetch(`/api/${currentDeleteType}?id=${currentDeleteId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                closeDeleteModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    loadObjects();
+                    if (currentObjectId) {
+                        setTimeout(() => loadObjectDetails(currentObjectId), 100);
+                    }
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('active');
+        }
+
+        function showMessage(success, title, message) {
+            document.getElementById('message-icon').textContent = success ? '✓' : '✗';
+            document.getElementById('message-icon').className = 'modal-icon ' + (success ? 'success' : 'error');
+            document.getElementById('message-title').textContent = title;
+            document.getElementById('message-text').textContent = message;
+            document.getElementById('message-modal').classList.add('active');
+        }
+
+        function closeMessageModal() {
+            document.getElementById('message-modal').classList.remove('active');
         }
     </script>
 </body>

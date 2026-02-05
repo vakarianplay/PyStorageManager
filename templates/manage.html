@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Склад - Управление</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-row">
+            <h1>⚙️ Управление данными</h1>
+            <a href="/" class="btn btn-secondary">← На главную</a>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('objects')">Объекты</button>
+            <button class="tab" onclick="showTab('sellers')">Поставщики</button>
+            <button class="tab" onclick="showTab('themes')">Темы</button>
+        </div>
+
+        <div id="tab-objects" class="tab-content active">
+            <div class="form-card">
+                <h3>Объекты на складе</h3>
+                <table class="manage-table" id="objects-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Название</th>
+                            <th>Поступило</th>
+                            <th>Списано</th>
+                            <th>Остаток</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-sellers" class="tab-content">
+            <div class="form-card">
+                <h3>Поставщики</h3>
+                <table class="manage-table" id="sellers-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Название</th>
+                            <th>ИНН</th>
+                            <th>КПП</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="tab-themes" class="tab-content">
+            <div class="form-card">
+                <h3>Темы</h3>
+                <table class="manage-table" id="themes-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Название</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования -->
+    <div id="edit-modal" class="modal-overlay">
+        <div class="modal modal-edit">
+            <h3 id="edit-modal-title">Редактирование</h3>
+            <form id="edit-form">
+                <input type="hidden" id="edit-id" name="id">
+                <div id="edit-fields"></div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeEditModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <div id="delete-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon error">!</div>
+            <div class="modal-title">Подтверждение удаления</div>
+            <div class="modal-message" id="delete-message"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger" id="confirm-delete-btn">Удалить</button>
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно сообщения -->
+    <div id="message-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon" id="message-icon">✓</div>
+            <div class="modal-title" id="message-title">Успешно!</div>
+            <div class="modal-message" id="message-text"></div>
+            <button class="btn btn-primary modal-btn" onclick="closeMessageModal()">OK</button>
+        </div>
+    </div>
+
+    <script>
+        let currentEditType = '';
+        let currentDeleteType = '';
+        let currentDeleteId = null;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAllData();
+            document.getElementById('edit-form').addEventListener('submit', handleEditSubmit);
+        });
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
+            document.getElementById(`tab-${tabName}`).classList.add('active');
+        }
+
+        async function loadAllData() {
+            await Promise.all([loadObjects(), loadSellers(), loadThemes()]);
+        }
+
+        async function loadObjects() {
+            const response = await fetch('/api/objects');
+            const objects = await response.json();
+            const tbody = document.querySelector('#objects-table tbody');
+            tbody.innerHTML = objects.map(obj => `
+                <tr>
+                    <td>${obj.id}</td>
+                    <td>${obj.objectname}</td>
+                    <td>${obj.amount}</td>
+                    <td>${obj.write_off}</td>
+                    <td>${obj.balance}</td>
+                    <td>
+                        <button class="btn btn-small btn-edit" onclick="editObject(${obj.id})">✏️</button>
+                        <button class="btn btn-small btn-delete" onclick="confirmDelete('object', ${obj.id}, '${obj.objectname}')">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadSellers() {
+            const response = await fetch('/api/sellers');
+            const sellers = await response.json();
+            const tbody = document.querySelector('#sellers-table tbody');
+            tbody.innerHTML = sellers.map(s => `
+                <tr>
+                    <td>${s.id}</td>
+                    <td>${s.name}</td>
+                    <td>${s.inn}</td>
+                    <td>${s.kpp}</td>
+                    <td>
+                        <button class="btn btn-small btn-edit" onclick="editSeller(${s.id})">✏️</button>
+                        <button class="btn btn-small btn-delete" onclick="confirmDelete('seller', ${s.id}, '${s.name}')">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function loadThemes() {
+            const response = await fetch('/api/themes');
+            const themes = await response.json();
+            const tbody = document.querySelector('#themes-table tbody');
+            tbody.innerHTML = themes.map(t => `
+                <tr>
+                    <td>${t.id}</td>
+                    <td>${t.name}</td>
+                    <td>
+                        <button class="btn btn-small btn-edit" onclick="editTheme(${t.id})">✏️</button>
+                        <button class="btn btn-small btn-delete" onclick="confirmDelete('theme', ${t.id}, '${t.name}')">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function editObject(id) {
+            const response = await fetch(`/api/object?id=${id}`);
+            const obj = await response.json();
+            currentEditType = 'object';
+            document.getElementById('edit-modal-title').textContent = 'Редактирование объекта';
+            document.getElementById('edit-id').value = obj.id;
+            document.getElementById('edit-fields').innerHTML = `
+                <div class="form-group">
+                    <label>Название</label>
+                    <input type="text" name="objectName" value="${obj.objectname}" required>
+                </div>
+            `;
+            document.getElementById('edit-modal').classList.add('active');
+        }
+
+        async function editSeller(id) {
+            const response = await fetch(`/api/seller?id=${id}`);
+            const seller = await response.json();
+            currentEditType = 'seller';
+            document.getElementById('edit-modal-title').textContent = 'Редактирование поставщика';
+            document.getElementById('edit-id').value = seller.id;
+            document.getElementById('edit-fields').innerHTML = `
+                <div class="form-group">
+                    <label>Название</label>
+                    <input type="text" name="name" value="${seller.name}" required>
+                </div>
+                <div class="form-group">
+                    <label>ИНН</label>
+                    <input type="text" name="inn" value="${seller.inn}" required>
+                </div>
+                <div class="form-group">
+                    <label>КПП</label>
+                    <input type="text" name="kpp" value="${seller.kpp}" required>
+                </div>
+            `;
+            document.getElementById('edit-modal').classList.add('active');
+        }
+
+        async function editTheme(id) {
+            const response = await fetch(`/api/theme?id=${id}`);
+            const theme = await response.json();
+            currentEditType = 'theme';
+            document.getElementById('edit-modal-title').textContent = 'Редактирование темы';
+            document.getElementById('edit-id').value = theme.id;
+            document.getElementById('edit-fields').innerHTML = `
+                <div class="form-group">
+                    <label>Название</label>
+                    <input type="text" name="name" value="${theme.name}" required>
+                </div>
+            `;
+            document.getElementById('edit-modal').classList.add('active');
+        }
+
+        async function handleEditSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+
+            try {
+                const response = await fetch(`/api/${currentEditType}`, {
+                    method: 'PUT',
+                    body: formData
+                });
+                const result = await response.json();
+
+                closeEditModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    loadAllData();
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closeEditModal() {
+            document.getElementById('edit-modal').classList.remove('active');
+        }
+
+        function confirmDelete(type, id, name) {
+            currentDeleteType = type;
+            currentDeleteId = id;
+            const typeNames = {
+                'object': 'объект',
+                'seller': 'поставщика',
+                'theme': 'тему'
+            };
+            document.getElementById('delete-message').textContent = 
+                `Вы уверены, что хотите удалить ${typeNames[type]} "${name}"?`;
+            document.getElementById('confirm-delete-btn').onclick = executeDelete;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        async function executeDelete() {
+            try {
+                const response = await fetch(`/api/${currentDeleteType}?id=${currentDeleteId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                closeDeleteModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    loadAllData();
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('active');
+        }
+
+        function showMessage(success, title, message) {
+            document.getElementById('message-icon').textContent = success ? '✓' : '✗';
+            document.getElementById('message-icon').className = 'modal-icon ' + (success ? 'success' : 'error');
+            document.getElementById('message-title').textContent = title;
+            document.getElementById('message-text').textContent = message;
+            document.getElementById('message-modal').classList.add('active');
+        }
+
+        function closeMessageModal() {
+            document.getElementById('message-modal').classList.remove('active');
+        }
+    </script>
+</body>
+</html>
