@@ -23,7 +23,7 @@ class Database:
             )
         return self._connection
 
-    def _call_function(self, func_name, params=None, fetch=False):
+    def call_function(self, func_name, params=None, fetch=False):
         conn = self._get_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
             if params:
@@ -36,7 +36,7 @@ class Database:
                 return cur.fetchall()
             conn.commit()
 
-    def _call_function_scalar(self, func_name, params=None):
+    def call_function_scalar(self, func_name, params=None):
         conn = self._get_connection()
         with conn.cursor() as cur:
             if params:
@@ -59,16 +59,28 @@ class Database:
         return True
 
     def update_storage_stats(self):
-        self._call_function_scalar('update_objects_storage_stats')
+        self.call_function_scalar('update_objects_storage_stats')
 
     def get_all_objects(self):
-        return self._call_function('get_all_objects', fetch=True)
+        return self.call_function('get_all_objects', fetch=True)
+
+    def get_object_by_id(self, object_id):
+        result = self.call_function('get_object_by_id', (object_id,), fetch=True)
+        return result[0] if result else None
 
     def get_receipts_by_object(self, object_id):
-        return self._call_function('get_receipts_by_object', (object_id,), fetch=True)
+        return self.call_function('get_receipts_by_object', (object_id,), fetch=True)
+
+    def get_receipt_by_id(self, receipt_id):
+        result = self.call_function('get_receipt_by_id', (receipt_id,), fetch=True)
+        return result[0] if result else None
 
     def get_writeoffs_by_object(self, object_id):
-        return self._call_function('get_writeoffs_by_object', (object_id,), fetch=True)
+        return self.call_function('get_writeoffs_by_object', (object_id,), fetch=True)
+
+    def get_writeoff_by_id(self, writeoff_id):
+        result = self.call_function('get_writeoff_by_id', (writeoff_id,), fetch=True)
+        return result[0] if result else None
 
     def get_object_details(self, object_id):
         return {
@@ -77,67 +89,19 @@ class Database:
         }
 
     def get_all_sellers(self):
-        return self._call_function('get_all_sellers', fetch=True)
+        return self.call_function('get_all_sellers', fetch=True)
 
-    def get_all_themes(self):
-        return self._call_function('get_all_themes', fetch=True)
-
-    def get_file(self, file_type, file_id):
-        result = self._call_function('get_file', (file_type, file_id), fetch=True)
+    def get_seller_by_id(self, seller_id):
+        result = self.call_function('get_seller_by_id', (seller_id,), fetch=True)
         return result[0] if result else None
 
-class StorageManager:
-    def __init__(self, db: Database):
-        self._db = db
+    def get_all_themes(self):
+        return self.call_function('get_all_themes', fetch=True)
 
-    def create_object(self, object_name):
-        new_id = self._db._call_function_scalar('create_object', (object_name,))
-        return {'id': new_id}
+    def get_theme_by_id(self, theme_id):
+        result = self.call_function('get_theme_by_id', (theme_id,), fetch=True)
+        return result[0] if result else None
 
-    def create_seller(self, name, inn, kpp):
-        new_id = self._db._call_function_scalar('create_seller', (name, inn, kpp))
-        return {'id': new_id}
-
-    def create_theme(self, name):
-        new_id = self._db._call_function_scalar('create_theme', (name,))
-        return {'id': new_id}
-
-    def create_bill(self, number, date, seller_id, file_data, filename):
-        file_binary = psycopg2.Binary(file_data) if file_data else None
-        new_id = self._db._call_function_scalar(
-            'create_bill',
-            (number, date, seller_id, file_binary, filename)
-        )
-        return {'id': new_id}
-
-    def create_invoice(self, number, date, seller_id, bill_id, file_data, filename):
-        file_binary = psycopg2.Binary(file_data) if file_data else None
-        new_id = self._db._call_function_scalar(
-            'create_invoice',
-            (number, date, seller_id, bill_id, file_binary, filename)
-        )
-        return {'id': new_id}
-
-    def create_entry_control(self, number, date, file_data, filename):
-        file_binary = psycopg2.Binary(file_data) if file_data else None
-        new_id = self._db._call_function_scalar(
-            'create_entry_control',
-            (number, date, file_binary, filename)
-        )
-        return {'id': new_id}
-
-    def create_receipt(self, object_id, seller_object_name, seller_id, bill_id,
-                       theme_id, invoice_id, entry_control_id, location, quantity):
-        new_id = self._db._call_function_scalar(
-            'create_receipt',
-            (object_id, seller_object_name, seller_id, bill_id,
-             theme_id, invoice_id, entry_control_id, location, quantity)
-        )
-        return {'id': new_id}
-
-    def create_writeoff(self, object_id, theme_id, quantity):
-        new_id = self._db._call_function_scalar(
-            'create_writeoff',
-            (object_id, theme_id, quantity)
-        )
-        return {'id': new_id}
+    def get_file(self, file_type, file_id):
+        result = self.call_function('get_file', (file_type, file_id), fetch=True)
+        return result[0] if result else None

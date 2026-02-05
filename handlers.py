@@ -1,0 +1,369 @@
+import json
+import re
+from urllib.parse import quote
+
+class RequestHandler:
+    def __init__(self, db, manager):
+        self.db = db
+        self.manager = manager
+
+    # GET handlers
+    def get_objects(self):
+        self.db.update_storage_stats()
+        objects = self.db.get_all_objects()
+        return [dict(obj) for obj in objects]
+
+    def get_object(self, object_id):
+        obj = self.db.get_object_by_id(object_id)
+        if obj:
+            return dict(obj)
+        raise ValueError('Object not found')
+
+    def get_object_details(self, object_id):
+        details = self.db.get_object_details(object_id)
+        return {
+            'receipts': [dict(r) for r in details['receipts']],
+            'writeoffs': [dict(w) for w in details['writeoffs']]
+        }
+
+    def get_sellers(self):
+        sellers = self.db.get_all_sellers()
+        return [dict(s) for s in sellers]
+
+    def get_seller(self, seller_id):
+        seller = self.db.get_seller_by_id(seller_id)
+        if seller:
+            return dict(seller)
+        raise ValueError('Seller not found')
+
+    def get_themes(self):
+        themes = self.db.get_all_themes()
+        return [dict(t) for t in themes]
+
+    def get_theme(self, theme_id):
+        theme = self.db.get_theme_by_id(theme_id)
+        if theme:
+            return dict(theme)
+        raise ValueError('Theme not found')
+
+    def get_receipt(self, receipt_id):
+        receipt = self.db.get_receipt_by_id(receipt_id)
+        if receipt:
+            return dict(receipt)
+        raise ValueError('Receipt not found')
+
+    def get_writeoff(self, writeoff_id):
+        writeoff = self.db.get_writeoff_by_id(writeoff_id)
+        if writeoff:
+            return dict(writeoff)
+        raise ValueError('Writeoff not found')
+
+    def get_file(self, file_type, file_id):
+        result = self.db.get_file(file_type, file_id)
+        if not result or not result.get('file'):
+            raise ValueError('File not found')
+        return result
+
+    # CREATE handlers
+    def create_object(self, fields):
+        object_name = fields.get('objectName')
+        if not object_name:
+            raise ValueError('Missing objectName')
+        result = self.manager.create_object(object_name)
+        return {
+            'success': True,
+            'id': result['id'],
+            'message': f'Объект "{object_name}" успешно создан'
+        }
+
+    def create_seller(self, fields):
+        name = fields.get('name')
+        inn = fields.get('inn')
+        kpp = fields.get('kpp')
+        if not all([name, inn, kpp]):
+            raise ValueError('Missing required fields')
+        result = self.manager.create_seller(name, inn, kpp)
+        return {
+            'success': True,
+            'id': result['id'],
+            'message': f'Поставщик "{name}" успешно создан'
+        }
+
+    def create_theme(self, fields):
+        name = fields.get('name')
+        if not name:
+            raise ValueError('Missing name')
+        result = self.manager.create_theme(name)
+        return {
+            'success': True,
+            'id': result['id'],
+            'message': f'Тема "{name}" успешно создана'
+        }
+
+    def create_receipt(self, fields, files):
+        seller_id = fields.get('sellerId')
+        if fields.get('newSellerName'):
+            result = self.manager.create_seller(
+                fields['newSellerName'],
+                fields.get('newSellerInn', ''),
+                fields.get('newSellerKpp', '')
+            )
+            seller_id = result['id']
+
+        theme_id = fields.get('themeId')
+        if fields.get('newThemeName'):
+            result = self.manager.create_theme(fields['newThemeName'])
+            theme_id = result['id']
+
+        object_id = fields.get('objectId')
+        if fields.get('newObjectName'):
+            result = self.manager.create_object(fields['newObjectName'])
+            object_id = result['id']
+
+        bill_file_info = files.get('billFile', {})
+        bill_result = self.manager.create_bill(
+            fields.get('billNumber', ''),
+            fields.get('billDate'),
+            seller_id,
+            bill_file_info.get('data'),
+            bill_file_info.get('filename')
+        )
+        bill_id = bill_result['id']
+
+        invoice_file_info = files.get('invoiceFile', {})
+        invoice_result = self.manager.create_invoice(
+            fields.get('invoiceNumber', ''),
+            fields.get('invoiceDate'),
+            seller_id,
+            bill_id,
+            invoice_file_info.get('data'),
+            invoice_file_info.get('filename')
+        )
+        invoice_id = invoice_result['id']
+
+        entry_control_file_info = files.get('entryControlFile', {})
+        entry_control_result = self.manager.create_entry_control(
+            fields.get('entryControlNumber', ''),
+            fields.get('entryControlDate'),
+            entry_control_file_info.get('data'),
+            entry_control_file_info.get('filename')
+        )
+        entry_control_id = entry_control_result['id']
+
+        receipt_result = self.manager.create_receipt(
+            object_id,
+            fields.get('sellerObjectName', ''),
+            seller_id,
+            bill_id,
+            theme_id,
+            invoice_id,
+            entry_control_id,
+            fields.get('location', ''),
+            int(fields.get('quantity', 0))
+        )
+
+        return {
+            'success': True,
+            'id': receipt_result['id'],
+            'message': f'Поступление успешно зарегистрировано!\n\n'
+                       f'Количество: {fields.get("quantity", 0)} шт.\n'
+                       f'Счёт: {fields.get("billNumber", "-")}\n'
+                       f'Накладная: {fields.get("invoiceNumber", "-")}'
+        }
+
+    def create_writeoff(self, fields):
+        object_id = fields.get('objectId')
+        theme_id = fields.get('themeId')
+
+        if fields.get('newThemeName'):
+            result = self.manager.create_theme(fields['newThemeName'])
+            theme_id = result['id']
+
+        quantity = int(fields.get('quantity', 0))
+
+        result = self.manager.create_writeoff(object_id, theme_id, quantity)
+        return {
+            'success': True,
+            'id': result['id'],
+            'message': f'Списание успешно зарегистрировано!\n\nКоличество: {quantity} шт.'
+        }
+
+    # UPDATE handlers
+    def update_object(self, fields):
+        object_id = int(fields.get('id'))
+        object_name = fields.get('objectName')
+        self.manager.update_object(object_id, object_name)
+        return {
+            'success': True,
+            'message': f'Объект "{object_name}" успешно обновлён'
+        }
+
+    def update_seller(self, fields):
+        seller_id = int(fields.get('id'))
+        name = fields.get('name')
+        inn = fields.get('inn')
+        kpp = fields.get('kpp')
+        self.manager.update_seller(seller_id, name, inn, kpp)
+        return {
+            'success': True,
+            'message': f'Поставщик "{name}" успешно обновлён'
+        }
+
+    def update_theme(self, fields):
+        theme_id = int(fields.get('id'))
+        name = fields.get('name')
+        self.manager.update_theme(theme_id, name)
+        return {
+            'success': True,
+            'message': f'Тема "{name}" успешно обновлена'
+        }
+
+    def update_receipt(self, fields):
+        receipt_id = int(fields.get('id'))
+        object_id = int(fields.get('objectId'))
+        seller_object_name = fields.get('sellerObjectName')
+        seller_id = int(fields.get('sellerId'))
+        theme_id = int(fields.get('themeId'))
+        location = fields.get('location')
+        quantity = int(fields.get('quantity'))
+
+        self.manager.update_receipt(
+            receipt_id, object_id, seller_object_name,
+            seller_id, theme_id, location, quantity
+        )
+        return {
+            'success': True,
+            'message': 'Поступление успешно обновлено'
+        }
+
+    def update_writeoff(self, fields):
+        writeoff_id = int(fields.get('id'))
+        object_id = int(fields.get('objectId'))
+        theme_id = int(fields.get('themeId'))
+        quantity = int(fields.get('quantity'))
+
+        self.manager.update_writeoff(writeoff_id, object_id, theme_id, quantity)
+        return {
+            'success': True,
+            'message': 'Списание успешно обновлено'
+        }
+
+    # DELETE handlers
+    def delete_object(self, object_id):
+        self.manager.delete_object(object_id)
+        return {
+            'success': True,
+            'message': 'Объект успешно удалён'
+        }
+
+    def delete_seller(self, seller_id):
+        self.manager.delete_seller(seller_id)
+        return {
+            'success': True,
+            'message': 'Поставщик успешно удалён'
+        }
+
+    def delete_theme(self, theme_id):
+        self.manager.delete_theme(theme_id)
+        return {
+            'success': True,
+            'message': 'Тема успешно удалена'
+        }
+
+    def delete_receipt(self, receipt_id):
+        self.manager.delete_receipt(receipt_id)
+        return {
+            'success': True,
+            'message': 'Поступление успешно удалено'
+        }
+
+    def delete_writeoff(self, writeoff_id):
+        self.manager.delete_writeoff(writeoff_id)
+        return {
+            'success': True,
+            'message': 'Списание успешно удалено'
+        }
+
+class MultipartParser:
+    @staticmethod
+    def parse(headers, rfile):
+        content_type = headers.get('Content-Type', '')
+
+        if 'multipart/form-data' not in content_type:
+            content_length = int(headers.get('Content-Length', 0))
+            body = rfile.read(content_length)
+            return json.loads(body.decode('utf-8')), {}
+
+        boundary = content_type.split('boundary=')[1].encode()
+        content_length = int(headers.get('Content-Length', 0))
+        body = rfile.read(content_length)
+
+        fields = {}
+        files = {}
+
+        parts = body.split(b'--' + boundary)
+        for part in parts:
+            if not part or part == b'--\r\n' or part == b'--':
+                continue
+
+            if b'\r\n\r\n' not in part:
+                continue
+
+            headers_raw, content = part.split(b'\r\n\r\n', 1)
+            content = content.rstrip(b'\r\n')
+
+            headers_text = headers_raw.decode('utf-8', errors='ignore')
+
+            name_match = re.search(r'name="([^"]+)"', headers_text)
+            filename_match = re.search(r'filename="([^"]+)"', headers_text)
+
+            if name_match:
+                field_name = name_match.group(1)
+                if filename_match:
+                    files[field_name] = {
+                        'filename': filename_match.group(1),
+                        'data': content
+                    }
+                else:
+                    fields[field_name] = content.decode('utf-8')
+
+        return fields, files
+
+class FileHelper:
+    CONTENT_TYPES = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls': 'application/vnd.ms-excel',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    }
+
+    INLINE_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/gif']
+
+    @classmethod
+    def detect_content_type(cls, file_data, filename=''):
+        ext = filename.lower().split('.')[-1] if '.' in filename else ''
+
+        if ext in cls.CONTENT_TYPES:
+            return cls.CONTENT_TYPES[ext]
+
+        if file_data[:4] == b'%PDF':
+            return 'application/pdf'
+        if file_data[:3] == b'\xff\xd8\xff':
+            return 'image/jpeg'
+        if file_data[:8] == b'\x89PNG\r\n\x1a\n':
+            return 'image/png'
+
+        return 'application/octet-stream'
+
+    @classmethod
+    def is_inline(cls, content_type):
+        return content_type in cls.INLINE_TYPES
+
+    @staticmethod
+    def encode_filename(filename):
+        return quote(filename)
