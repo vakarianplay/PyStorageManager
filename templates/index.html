@@ -165,6 +165,7 @@
                 <table class="details-table">
                     <tr>
                         <th>Название</th>
+                        <th>Наименование</th>
                         <th>Кол-во</th>
                         <th>Тема списания</th>
                     </tr>
@@ -174,6 +175,7 @@
                 html += `
                     <tr>
                         <td>${w.object_name || '-'}</td>
+                        <td>${w.seller_object_name || '-'}</td>
                         <td>${w.quantity}</td>
                         <td>${w.theme_name || '-'}</td>
                     </tr>
