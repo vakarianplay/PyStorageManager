@@ -85,10 +85,6 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                 self.serve_file(filepath, content_type)
             elif path == '/api/objects':
                 self.send_json_response(self.handler.get_objects())
-            elif path == '/api/search':
-                search_type = query.get('type', ['name'])[0]
-                search_value = query.get('value', [''])[0]
-                self.send_json_response(self.handler.search_objects(search_type, search_value))
             elif path == '/api/object':
                 object_id = query.get('id', [None])[0]
                 if object_id:

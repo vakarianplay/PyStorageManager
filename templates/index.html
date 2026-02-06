@@ -15,27 +15,6 @@
                 <a href="/manage" class="btn btn-secondary">⚙️ Управление</a>
             </div>
         </div>
-
-        <!-- Блок поиска -->
-        <div class="search-panel">
-            <div class="search-row">
-                <select id="search-type" class="search-select" onchange="onSearchTypeChange()">
-                    <option value="name">Название</option>
-                    <option value="seller_name">Наименование</option>
-                    <option value="theme">Тема</option>
-                    <option value="bill">Номер счёта</option>
-                    <option value="invoice">Номер накладной</option>
-                </select>
-                <input type="text" id="search-input" class="search-input" placeholder="Введите текст для поиска...">
-                <select id="search-theme-select" class="search-select" style="display: none;">
-                    <option value="">-- Выберите тему --</option>
-                </select>
-                <button class="btn btn-primary" onclick="performSearch()">🔍 Поиск</button>
-                <button class="btn btn-secondary" onclick="resetSearch()">✖ Сброс</button>
-            </div>
-            <div id="search-info" class="search-info" style="display: none;"></div>
-        </div>
-
         <div id="loading">Загрузка данных...</div>
         <div id="objects-list"></div>
     </div>
@@ -134,20 +113,12 @@
         let currentDeleteType = '';
         let currentDeleteId = null;
         let currentObjectId = null;
-        let expandedObjects = new Set();
-        let isSearchActive = false;
 
         document.addEventListener('DOMContentLoaded', () => {
             loadObjects();
             loadSelectorsData();
             document.getElementById('edit-receipt-form').addEventListener('submit', handleReceiptSubmit);
             document.getElementById('edit-writeoff-form').addEventListener('submit', handleWriteoffSubmit);
-
-            document.getElementById('search-input').addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    performSearch();
-                }
-            });
         });
 
         async function loadSelectorsData() {
@@ -159,99 +130,11 @@
             objectsCache = objects;
             sellersCache = sellers;
             themesCache = themes;
-
-            const themeSelect = document.getElementById('search-theme-select');
-            themeSelect.innerHTML = '<option value="">-- Выберите тему --</option>' +
-                themes.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
-        }
-
-        function onSearchTypeChange() {
-            const searchType = document.getElementById('search-type').value;
-            const searchInput = document.getElementById('search-input');
-            const themeSelect = document.getElementById('search-theme-select');
-
-            if (searchType === 'theme') {
-                searchInput.style.display = 'none';
-                themeSelect.style.display = 'block';
-            } else {
-                searchInput.style.display = 'block';
-                themeSelect.style.display = 'none';
-            }
-        }
-
-        async function performSearch() {
-            const searchType = document.getElementById('search-type').value;
-            let searchValue = '';
-
-            if (searchType === 'theme') {
-                searchValue = document.getElementById('search-theme-select').value;
-                if (!searchValue) {
-                    showMessage(false, 'Ошибка', 'Выберите тему для поиска');
-                    return;
-                }
-            } else {
-                searchValue = document.getElementById('search-input').value.trim();
-                if (!searchValue) {
-                    showMessage(false, 'Ошибка', 'Введите текст для поиска');
-                    return;
-                }
-            }
-
-            isSearchActive = true;
-            expandedObjects.clear();
-
-            const loadingDiv = document.getElementById('loading');
-            const listDiv = document.getElementById('objects-list');
-            const searchInfo = document.getElementById('search-info');
-
-            loadingDiv.style.display = 'block';
-            loadingDiv.textContent = 'Поиск...';
-            listDiv.innerHTML = '';
-
-            try {
-                const response = await fetch(`/api/search?type=${searchType}&value=${encodeURIComponent(searchValue)}`);
-                const objects = await response.json();
-
-                loadingDiv.style.display = 'none';
-
-                const typeNames = {
-                    'name': 'названию',
-                    'seller_name': 'наименованию',
-                    'theme': 'теме',
-                    'bill': 'номеру счёта',
-                    'invoice': 'номеру накладной'
-                };
-
-                searchInfo.style.display = 'block';
-                searchInfo.innerHTML = `Найдено по ${typeNames[searchType]}: <strong>${objects.length}</strong> объектов`;
-
-                if (objects.length === 0) {
-                    listDiv.innerHTML = '<p class="no-data">Ничего не найдено</p>';
-                    return;
-                }
-
-                listDiv.innerHTML = objects.map(createObjectRow).join('');
-            } catch (error) {
-                loadingDiv.textContent = 'Ошибка поиска: ' + error.message;
-            }
-        }
-
-        async function resetSearch() {
-            isSearchActive = false;
-            expandedObjects.clear();
-
-            document.getElementById('search-type').value = 'name';
-            document.getElementById('search-input').value = '';
-            document.getElementById('search-theme-select').value = '';
-            document.getElementById('search-info').style.display = 'none';
-
-            onSearchTypeChange();
-            await loadObjects();
         }
 
         function populateSelect(selectId, items, valueKey, textKey, selectedValue = null) {
             const select = document.getElementById(selectId);
-            select.innerHTML = items.map(item =>
+            select.innerHTML = items.map(item => 
                 `<option value="${item[valueKey]}" ${item[valueKey] == selectedValue ? 'selected' : ''}>${item[textKey]}</option>`
             ).join('');
         }
@@ -263,7 +146,6 @@
             try {
                 const response = await fetch('/api/objects');
                 const objects = await response.json();
-                objectsCache = objects;
 
                 loadingDiv.style.display = 'none';
 
@@ -273,16 +155,6 @@
                 }
 
                 listDiv.innerHTML = objects.map(createObjectRow).join('');
-
-                for (const objectId of expandedObjects) {
-                    const detailsDiv = document.getElementById(`details-${objectId}`);
-                    const icon = document.getElementById(`icon-${objectId}`);
-                    if (detailsDiv && icon) {
-                        detailsDiv.style.display = 'block';
-                        icon.textContent = '▼';
-                        loadObjectDetails(objectId);
-                    }
-                }
             } catch (error) {
                 loadingDiv.textContent = 'Ошибка загрузки: ' + error.message;
             }
@@ -291,13 +163,12 @@
         function createObjectRow(obj) {
             const name = obj.objectname || obj.object_name || 'Без названия';
             const balanceClass = obj.balance > 0 ? 'positive' : (obj.balance < 0 ? 'negative' : 'zero');
-            const isExpanded = expandedObjects.has(obj.id);
 
             return `
                 <div class="object-card" id="object-${obj.id}">
                     <div class="object-header" onclick="toggleDetails(${obj.id})">
                         <div class="object-name">
-                            <span class="expand-icon" id="icon-${obj.id}">${isExpanded ? '▼' : '▶'}</span>
+                            <span class="expand-icon" id="icon-${obj.id}">▶</span>
                             ${name}
                         </div>
                         <div class="object-stats">
@@ -315,7 +186,7 @@
                             </span>
                         </div>
                     </div>
-                    <div class="object-details" id="details-${obj.id}" style="display: ${isExpanded ? 'block' : 'none'};">
+                    <div class="object-details" id="details-${obj.id}" style="display: none;">
                         <div class="details-loading">Загрузка...</div>
                     </div>
                 </div>
@@ -329,13 +200,11 @@
             if (detailsDiv.style.display === 'none') {
                 detailsDiv.style.display = 'block';
                 icon.textContent = '▼';
-                expandedObjects.add(objectId);
                 currentObjectId = objectId;
                 await loadObjectDetails(objectId);
             } else {
                 detailsDiv.style.display = 'none';
                 icon.textContent = '▶';
-                expandedObjects.delete(objectId);
             }
         }
 
@@ -350,19 +219,6 @@
             } catch (error) {
                 detailsDiv.innerHTML = '<p class="error">Ошибка загрузки: ' + error.message + '</p>';
             }
-        }
-
-        async function refreshCurrentView() {
-            const scrollPosition = window.scrollY;
-
-            if (isSearchActive) {
-                await performSearch();
-            } else {
-                await loadObjects();
-            }
-            await loadSelectorsData();
-
-            window.scrollTo(0, scrollPosition);
         }
 
         function createFileLink(type, id, number) {
@@ -411,9 +267,9 @@
                         <td>${createFileLink('entry_control', r.entry_control_id, r.entry_control_number)}</td>
                         <td>${r.entry_control_date || '-'}</td>
                         <td>${r.location || '-'}</td>
-                        <td class="actions-cell">
-                            <button class="btn btn-small btn-edit" onclick="editReceipt(${r.id})" title="Редактировать">✏️</button>
-                            <button class="btn btn-small btn-delete" onclick="confirmDeleteReceipt(${r.id})" title="Удалить">🗑️</button>
+                        <td>
+                            <button class="btn btn-small btn-edit" onclick="editReceipt(${r.id})">✏️</button>
+                            <button class="btn btn-small btn-delete" onclick="confirmDeleteReceipt(${r.id})">🗑️</button>
                         </td>
                     </tr>
                 `;
@@ -447,9 +303,9 @@
                         <td>${w.seller_object_name || '-'}</td>
                         <td>${w.quantity}</td>
                         <td>${w.theme_name || '-'}</td>
-                        <td class="actions-cell">
-                            <button class="btn btn-small btn-edit" onclick="editWriteoff(${w.id})" title="Редактировать">✏️</button>
-                            <button class="btn btn-small btn-delete" onclick="confirmDeleteWriteoff(${w.id})" title="Удалить">🗑️</button>
+                        <td>
+                            <button class="btn btn-small btn-edit" onclick="editWriteoff(${w.id})">✏️</button>
+                            <button class="btn btn-small btn-delete" onclick="confirmDeleteWriteoff(${w.id})">🗑️</button>
                         </td>
                     </tr>
                 `;
@@ -490,7 +346,10 @@
                     showMessage(false, 'Ошибка', result.error);
                 } else {
                     showMessage(true, 'Успешно!', result.message);
-                    await refreshCurrentView();
+                    loadObjects();
+                    if (currentObjectId) {
+                        setTimeout(() => loadObjectDetails(currentObjectId), 100);
+                    }
                 }
             } catch (error) {
                 showMessage(false, 'Ошибка', error.message);
@@ -530,7 +389,10 @@
                     showMessage(false, 'Ошибка', result.error);
                 } else {
                     showMessage(true, 'Успешно!', result.message);
-                    await refreshCurrentView();
+                    loadObjects();
+                    if (currentObjectId) {
+                        setTimeout(() => loadObjectDetails(currentObjectId), 100);
+                    }
                 }
             } catch (error) {
                 showMessage(false, 'Ошибка', error.message);
@@ -570,7 +432,10 @@
                     showMessage(false, 'Ошибка', result.error);
                 } else {
                     showMessage(true, 'Успешно!', result.message);
-                    await refreshCurrentView();
+                    loadObjects();
+                    if (currentObjectId) {
+                        setTimeout(() => loadObjectDetails(currentObjectId), 100);
+                    }
                 }
             } catch (error) {
                 showMessage(false, 'Ошибка', error.message);
@@ -592,22 +457,6 @@
         function closeMessageModal() {
             document.getElementById('message-modal').classList.remove('active');
         }
-
-        document.querySelectorAll('.modal-overlay').forEach(overlay => {
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) {
-                    overlay.classList.remove('active');
-                }
-            });
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                document.querySelectorAll('.modal-overlay.active').forEach(modal => {
-                    modal.classList.remove('active');
-                });
-            }
-        });
     </script>
 </body>
 </html>
