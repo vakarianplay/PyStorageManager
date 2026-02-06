@@ -105,3 +105,19 @@ class Database:
     def get_file(self, file_type, file_id):
         result = self.call_function('get_file', (file_type, file_id), fetch=True)
         return result[0] if result else None
+
+    # Search methods
+    def search_objects_by_name(self, search_text):
+        return self.call_function('search_objects_by_name', (search_text,), fetch=True)
+
+    def search_objects_by_seller_name(self, search_text):
+        return self.call_function('search_objects_by_seller_name', (search_text,), fetch=True)
+
+    def search_objects_by_theme(self, theme_id):
+        return self.call_function('search_objects_by_theme', (theme_id,), fetch=True)
+
+    def search_objects_by_bill(self, search_text):
+        return self.call_function('search_objects_by_bill', (search_text,), fetch=True)
+
+    def search_objects_by_invoice(self, search_text):
+        return self.call_function('search_objects_by_invoice', (search_text,), fetch=True)

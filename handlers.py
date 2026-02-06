@@ -64,6 +64,25 @@ class RequestHandler:
             raise ValueError('File not found')
         return result
 
+    # Search handler
+    def search_objects(self, search_type, search_value):
+        self.db.update_storage_stats()
+
+        if search_type == 'name':
+            objects = self.db.search_objects_by_name(search_value)
+        elif search_type == 'seller_name':
+            objects = self.db.search_objects_by_seller_name(search_value)
+        elif search_type == 'theme':
+            objects = self.db.search_objects_by_theme(int(search_value))
+        elif search_type == 'bill':
+            objects = self.db.search_objects_by_bill(search_value)
+        elif search_type == 'invoice':
+            objects = self.db.search_objects_by_invoice(search_value)
+        else:
+            objects = self.db.get_all_objects()
+
+        return [dict(obj) for obj in objects]
+
     # CREATE handlers
     def create_object(self, fields):
         object_name = fields.get('objectName')
