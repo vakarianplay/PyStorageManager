@@ -112,3 +112,23 @@ class StorageManager:
     def delete_writeoff(self, writeoff_id):
         result = self._db.call_function_scalar('delete_writeoff', (writeoff_id,))
         return {'success': result}
+
+class UserManager:
+    def __init__(self, db: Database):
+        self._db = db
+
+    def create_user(self, username, password_hash, admin=False):
+        new_id = self._db.call_function_scalar('create_user', (username, password_hash, admin))
+        return {'id': new_id}
+
+    def update_user(self, user_id, username, admin):
+        result = self._db.call_function_scalar('update_user', (user_id, username, admin))
+        return {'success': result}
+
+    def update_user_password(self, user_id, password_hash):
+        result = self._db.call_function_scalar('update_user_password', (user_id, password_hash))
+        return {'success': result}
+
+    def delete_user(self, user_id):
+        result = self._db.call_function_scalar('delete_user', (user_id,))
+        return {'success': result}

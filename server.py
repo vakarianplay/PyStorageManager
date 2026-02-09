@@ -3,19 +3,56 @@ import re
 import yaml
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
+from http.cookies import SimpleCookie
 
 from database import Database
-from manager import StorageManager
+from manager import StorageManager, UserManager
 from handlers import RequestHandler, MultipartParser, FileHelper
+from auth import SessionManager
 
 class StorageHTTPHandler(BaseHTTPRequestHandler):
     handler = None
+    session_manager = None
 
-    def send_json_response(self, data, status=200):
+    def get_session_id(self):
+        cookie_header = self.headers.get('Cookie', '')
+        cookie = SimpleCookie()
+        cookie.load(cookie_header)
+        if 'session_id' in cookie:
+            return cookie['session_id'].value
+        return None
+
+    def get_current_user(self):
+        session_id = self.get_session_id()
+        if session_id:
+            return self.session_manager.get_session(session_id)
+        return None
+
+    def require_auth(self):
+        user = self.get_current_user()
+        if not user:
+            self.send_error_json('Требуется авторизация', 401)
+            return None
+        return user
+
+    def require_admin(self):
+        user = self.require_auth()
+        if not user:
+            return None
+        if not user.get('admin'):
+            self.send_error_json('Требуются права администратора', 403)
+            return None
+        return user
+
+    def send_json_response(self, data, status=200, session_id=None):
         json_data = json.dumps(data, default=str, ensure_ascii=False)
         self.send_response(status)
         self.send_header('Content-Type', 'application/json; charset=utf-8')
         self.send_header('Access-Control-Allow-Origin', '*')
+
+        if session_id:
+            self.send_header('Set-Cookie', f'session_id={session_id}; Path=/; HttpOnly; SameSite=Strict')
+
         self.end_headers()
         self.wfile.write(json_data.encode('utf-8'))
 
@@ -76,6 +113,8 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             '/add.html': ('templates/add.html', 'text/html'),
             '/manage': ('templates/manage.html', 'text/html'),
             '/manage.html': ('templates/manage.html', 'text/html'),
+            '/users': ('templates/users.html', 'text/html'),
+            '/users.html': ('templates/users.html', 'text/html'),
             '/static/style.css': ('static/style.css', 'text/css'),
         }
 
@@ -83,8 +122,15 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             if path in routes:
                 filepath, content_type = routes[path]
                 self.serve_file(filepath, content_type)
+            elif path == '/api/auth/check':
+                session_id = self.get_session_id()
+                self.send_json_response(self.handler.get_current_user(session_id))
             elif path == '/api/objects':
                 self.send_json_response(self.handler.get_objects())
+            elif path == '/api/search':
+                search_type = query.get('type', ['name'])[0]
+                search_value = query.get('value', [''])[0]
+                self.send_json_response(self.handler.search_objects(search_type, search_value))
             elif path == '/api/object':
                 object_id = query.get('id', [None])[0]
                 if object_id:
@@ -125,6 +171,18 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     self.send_json_response(self.handler.get_writeoff(int(writeoff_id)))
                 else:
                     self.send_error_json('Missing writeoff id', 400)
+            elif path == '/api/users':
+                if not self.require_admin():
+                    return
+                self.send_json_response(self.handler.get_users())
+            elif path == '/api/user':
+                if not self.require_admin():
+                    return
+                user_id = query.get('id', [None])[0]
+                if user_id:
+                    self.send_json_response(self.handler.get_user(int(user_id)))
+                else:
+                    self.send_error_json('Missing user id', 400)
             elif path.startswith('/api/file/'):
                 self.serve_document_file(path)
             else:
@@ -139,16 +197,39 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
         fields, files = MultipartParser.parse(self.headers, self.rfile)
 
         try:
-            if path == '/api/object':
+            if path == '/api/auth/login':
+                username = fields.get('username', '')
+                password = fields.get('password', '')
+                result = self.handler.login(username, password)
+                self.send_json_response(result, session_id=result['session_id'])
+            elif path == '/api/auth/logout':
+                session_id = self.get_session_id()
+                self.handler.logout(session_id)
+                self.send_json_response({'success': True})
+            elif path == '/api/object':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.create_object(fields))
             elif path == '/api/seller':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.create_seller(fields))
             elif path == '/api/theme':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.create_theme(fields))
             elif path == '/api/receipt':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.create_receipt(fields, files))
             elif path == '/api/writeoff':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.create_writeoff(fields))
+            elif path == '/api/user':
+                if not self.require_admin():
+                    return
+                self.send_json_response(self.handler.create_user(fields))
             else:
                 self.send_error_json('Not Found', 404)
         except ValueError as e:
@@ -162,15 +243,29 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
 
         try:
             if path == '/api/object':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.update_object(fields))
             elif path == '/api/seller':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.update_seller(fields))
             elif path == '/api/theme':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.update_theme(fields))
             elif path == '/api/receipt':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.update_receipt(fields))
             elif path == '/api/writeoff':
+                if not self.require_auth():
+                    return
                 self.send_json_response(self.handler.update_writeoff(fields))
+            elif path == '/api/user':
+                if not self.require_admin():
+                    return
+                self.send_json_response(self.handler.update_user(fields))
             else:
                 self.send_error_json('Not Found', 404)
         except ValueError as e:
@@ -185,35 +280,53 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
 
         try:
             if path == '/api/object':
+                if not self.require_auth():
+                    return
                 object_id = query.get('id', [None])[0]
                 if object_id:
                     self.send_json_response(self.handler.delete_object(int(object_id)))
                 else:
                     self.send_error_json('Missing object id', 400)
             elif path == '/api/seller':
+                if not self.require_auth():
+                    return
                 seller_id = query.get('id', [None])[0]
                 if seller_id:
                     self.send_json_response(self.handler.delete_seller(int(seller_id)))
                 else:
                     self.send_error_json('Missing seller id', 400)
             elif path == '/api/theme':
+                if not self.require_auth():
+                    return
                 theme_id = query.get('id', [None])[0]
                 if theme_id:
                     self.send_json_response(self.handler.delete_theme(int(theme_id)))
                 else:
                     self.send_error_json('Missing theme id', 400)
             elif path == '/api/receipt':
+                if not self.require_auth():
+                    return
                 receipt_id = query.get('id', [None])[0]
                 if receipt_id:
                     self.send_json_response(self.handler.delete_receipt(int(receipt_id)))
                 else:
                     self.send_error_json('Missing receipt id', 400)
             elif path == '/api/writeoff':
+                if not self.require_auth():
+                    return
                 writeoff_id = query.get('id', [None])[0]
                 if writeoff_id:
                     self.send_json_response(self.handler.delete_writeoff(int(writeoff_id)))
                 else:
                     self.send_error_json('Missing writeoff id', 400)
+            elif path == '/api/user':
+                if not self.require_admin():
+                    return
+                user_id = query.get('id', [None])[0]
+                if user_id:
+                    self.send_json_response(self.handler.delete_user(int(user_id)))
+                else:
+                    self.send_error_json('Missing user id', 400)
             else:
                 self.send_error_json('Not Found', 404)
         except ValueError as e:
@@ -236,7 +349,11 @@ def run_server(config_path='config.yaml'):
     db.test_connection()
 
     manager = StorageManager(db)
-    StorageHTTPHandler.handler = RequestHandler(db, manager)
+    user_manager = UserManager(db)
+    session_manager = SessionManager()
+
+    StorageHTTPHandler.handler = RequestHandler(db, manager, user_manager, session_manager)
+    StorageHTTPHandler.session_manager = session_manager
 
     server_address = (server_config['host'], server_config['port'])
     httpd = HTTPServer(server_address, StorageHTTPHandler)

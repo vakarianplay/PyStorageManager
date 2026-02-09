@@ -1,11 +1,94 @@
 import json
 import re
 from urllib.parse import quote
+from auth import SessionManager
 
 class RequestHandler:
-    def __init__(self, db, manager):
+    def __init__(self, db, manager, user_manager, session_manager):
         self.db = db
         self.manager = manager
+        self.user_manager = user_manager
+        self.session_manager = session_manager
+
+    # Auth handlers
+    def login(self, username, password):
+        password_hash = SessionManager.hash_password(password)
+        user = self.db.authenticate_user(username, password_hash)
+
+        if not user:
+            raise ValueError('Неверное имя пользователя или пароль')
+
+        session_id = self.session_manager.create_session(dict(user))
+        return {
+            'success': True,
+            'session_id': session_id,
+            'user': {
+                'id': user['id'],
+                'username': user['username'],
+                'admin': user['admin']
+            }
+        }
+
+    def logout(self, session_id):
+        self.session_manager.delete_session(session_id)
+        return {'success': True}
+
+    def get_current_user(self, session_id):
+        user = self.session_manager.get_session(session_id)
+        if user:
+            return {'authenticated': True, 'user': user}
+        return {'authenticated': False}
+
+    # User management (admin only)
+    def get_users(self):
+        users = self.db.get_all_users()
+        return [dict(u) for u in users]
+
+    def get_user(self, user_id):
+        user = self.db.get_user_by_id(user_id)
+        if user:
+            return dict(user)
+        raise ValueError('User not found')
+
+    def create_user(self, fields):
+        username = fields.get('username')
+        password = fields.get('password')
+        admin = fields.get('admin', '').lower() == 'true'
+
+        if not username or not password:
+            raise ValueError('Заполните все поля')
+
+        password_hash = SessionManager.hash_password(password)
+        result = self.user_manager.create_user(username, password_hash, admin)
+        return {
+            'success': True,
+            'id': result['id'],
+            'message': f'Пользователь "{username}" успешно создан'
+        }
+
+    def update_user(self, fields):
+        user_id = int(fields.get('id'))
+        username = fields.get('username')
+        admin = fields.get('admin', '').lower() == 'true'
+
+        self.user_manager.update_user(user_id, username, admin)
+
+        password = fields.get('password', '').strip()
+        if password:
+            password_hash = SessionManager.hash_password(password)
+            self.user_manager.update_user_password(user_id, password_hash)
+
+        return {
+            'success': True,
+            'message': f'Пользователь "{username}" успешно обновлён'
+        }
+
+    def delete_user(self, user_id):
+        self.user_manager.delete_user(user_id)
+        return {
+            'success': True,
+            'message': 'Пользователь успешно удалён'
+        }
 
     # GET handlers
     def get_objects(self):
@@ -63,6 +146,25 @@ class RequestHandler:
         if not result or not result.get('file'):
             raise ValueError('File not found')
         return result
+
+    # Search handler
+    def search_objects(self, search_type, search_value):
+        self.db.update_storage_stats()
+
+        if search_type == 'name':
+            objects = self.db.search_objects_by_name(search_value)
+        elif search_type == 'seller_name':
+            objects = self.db.search_objects_by_seller_name(search_value)
+        elif search_type == 'theme':
+            objects = self.db.search_objects_by_theme(int(search_value))
+        elif search_type == 'bill':
+            objects = self.db.search_objects_by_bill(search_value)
+        elif search_type == 'invoice':
+            objects = self.db.search_objects_by_invoice(search_value)
+        else:
+            objects = self.db.get_all_objects()
+
+        return [dict(obj) for obj in objects]
 
     # CREATE handlers
     def create_object(self, fields):
@@ -292,7 +394,9 @@ class MultipartParser:
         if 'multipart/form-data' not in content_type:
             content_length = int(headers.get('Content-Length', 0))
             body = rfile.read(content_length)
-            return json.loads(body.decode('utf-8')), {}
+            if body:
+                return json.loads(body.decode('utf-8')), {}
+            return {}, {}
 
         boundary = content_type.split('boundary=')[1].encode()
         content_length = int(headers.get('Content-Length', 0))
