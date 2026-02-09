@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Управление пользователями</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-row">
+            <h1>👥 Управление пользователями</h1>
+            <div class="header-buttons">
+                <button class="btn btn-primary" onclick="showCreateUserModal()">+ Добавить пользователя</button>
+                <a href="/" class="btn btn-secondary">← На главную</a>
+            </div>
+        </div>
+
+        <div class="form-card">
+            <table class="manage-table" id="users-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Имя пользователя</th>
+                        <th>Администратор</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Модальное окно создания/редактирования пользователя -->
+    <div id="user-modal" class="modal-overlay">
+        <div class="modal modal-edit">
+            <h3 id="user-modal-title">Новый пользователь</h3>
+            <form id="user-form">
+                <input type="hidden" id="user-id" name="id">
+                <div class="form-group">
+                    <label>Имя пользователя</label>
+                    <input type="text" id="user-username" name="username" required>
+                </div>
+                <div class="form-group">
+                    <label id="password-label">Пароль</label>
+                    <input type="password" id="user-password" name="password">
+                    <small id="password-hint" style="color: #666;"></small>
+                </div>
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="user-admin" name="admin">
+                        Администратор
+                    </label>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeUserModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления -->
+    <div id="delete-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon error">!</div>
+            <div class="modal-title">Подтверждение удаления</div>
+            <div class="modal-message" id="delete-message"></div>
+            <div class="modal-buttons">
+                <button class="btn btn-danger" id="confirm-delete-btn">Удалить</button>
+                <button class="btn btn-secondary" onclick="closeDeleteModal()">Отмена</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно сообщения -->
+    <div id="message-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-icon" id="message-icon">✓</div>
+            <div class="modal-title" id="message-title">Успешно!</div>
+            <div class="modal-message" id="message-text"></div>
+            <button class="btn btn-primary modal-btn" onclick="closeMessageModal()">OK</button>
+        </div>
+    </div>
+
+    <script>
+        let currentDeleteId = null;
+        let isEditMode = false;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAdminAccess();
+            loadUsers();
+            document.getElementById('user-form').addEventListener('submit', handleUserSubmit);
+        });
+
+        async function checkAdminAccess() {
+            const response = await fetch('/api/auth/check');
+            const data = await response.json();
+
+            if (!data.authenticated || !data.user.admin) {
+                window.location.href = '/';
+            }
+        }
+
+        async function loadUsers() {
+            try {
+                const response = await fetch('/api/users');
+                if (response.status === 403 || response.status === 401) {
+                    window.location.href = '/';
+                    return;
+                }
+                const users = await response.json();
+                renderUsers(users);
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function renderUsers(users) {
+            const tbody = document.querySelector('#users-table tbody');
+            tbody.innerHTML = users.map(user => `
+                <tr>
+                    <td>${user.id}</td>
+                    <td>${user.username}</td>
+                    <td>${user.admin ? '✅ Да' : '❌ Нет'}</td>
+                    <td>
+                        <button class="btn btn-small btn-edit" onclick="editUser(${user.id})" title="Редактировать">✏️</button>
+                        <button class="btn btn-small btn-delete" onclick="confirmDeleteUser(${user.id}, '${user.username}')" title="Удалить">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function showCreateUserModal() {
+            isEditMode = false;
+            document.getElementById('user-modal-title').textContent = 'Новый пользователь';
+            document.getElementById('user-id').value = '';
+            document.getElementById('user-username').value = '';
+            document.getElementById('user-password').value = '';
+            document.getElementById('user-password').required = true;
+            document.getElementById('password-hint').textContent = '';
+            document.getElementById('user-admin').checked = false;
+            document.getElementById('user-modal').classList.add('active');
+        }
+
+        async function editUser(id) {
+            try {
+                const response = await fetch(`/api/user?id=${id}`);
+                const user = await response.json();
+
+                isEditMode = true;
+                document.getElementById('user-modal-title').textContent = 'Редактирование пользователя';
+                document.getElementById('user-id').value = user.id;
+                document.getElementById('user-username').value = user.username;
+                document.getElementById('user-password').value = '';
+                document.getElementById('user-password').required = false;
+                document.getElementById('password-hint').textContent = 'Оставьте пустым, чтобы не менять пароль';
+                document.getElementById('user-admin').checked = user.admin;
+                document.getElementById('user-modal').classList.add('active');
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        async function handleUserSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+
+            if (!isEditMode && !formData.get('password')) {
+                showMessage(false, 'Ошибка', 'Введите пароль');
+                return;
+            }
+
+            formData.set('admin', document.getElementById('user-admin').checked ? 'true' : 'false');
+
+            try {
+                const response = await fetch('/api/user', {
+                    method: isEditMode ? 'PUT' : 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                closeUserModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    loadUsers();
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closeUserModal() {
+            document.getElementById('user-modal').classList.remove('active');
+        }
+
+        function confirmDeleteUser(id, username) {
+            currentDeleteId = id;
+            document.getElementById('delete-message').textContent = `Вы уверены, что хотите удалить пользователя "${username}"?`;
+            document.getElementById('confirm-delete-btn').onclick = executeDeleteUser;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        async function executeDeleteUser() {
+            try {
+                const response = await fetch(`/api/user?id=${currentDeleteId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+
+                closeDeleteModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    loadUsers();
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('delete-modal').classList.remove('active');
+        }
+
+        function showMessage(success, title, message) {
+            document.getElementById('message-icon').textContent = success ? '✓' : '✗';
+            document.getElementById('message-icon').className = 'modal-icon ' + (success ? 'success' : 'error');
+            document.getElementById('message-title').textContent = title;
+            document.getElementById('message-text').textContent = message;
+            document.getElementById('message-modal').classList.add('active');
+        }
+
+        function closeMessageModal() {
+            document.getElementById('message-modal').classList.remove('active');
+        }
+
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    overlay.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
