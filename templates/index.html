@@ -3,30 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Склад - Просмотр</title>
+    <title id="page-title">Склад - Просмотр объектов</title>
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" id="favicon">
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
     <div class="container">
         <div class="header-row">
-            <h1>📦 Склад - Просмотр объектов</h1>
+            <h1 id="main-title">
+                <span class="title-logo" id="title-logo">📦</span>
+                <span id="title-text">Склад - Просмотр объектов</span>
+            </h1>
             <div class="header-buttons">
-                <a href="/add" class="btn btn-primary">+ Добавить</a>
-                <a href="/manage" class="btn btn-secondary">⚙️ Управление</a>
+                <a href="/add" class="btn btn-primary auth-required" style="display: none;">+ Добавить</a>
+                <a href="/manage" class="btn btn-secondary auth-required" style="display: none;">⚙️ Управление</a>
+                <a href="/users" class="btn btn-secondary admin-required" style="display: none;">👥 Пользователи</a>
+                <button class="btn btn-outline" id="auth-btn" onclick="showLoginModal()">🔐 Войти</button>
             </div>
         </div>
 
-        <!-- Панель пользователя -->
-        <div class="user-panel" id="user-panel">
-            <div class="user-info" id="user-info" style="display: none;">
-                <span id="user-name"></span>
-                <button class="btn btn-small btn-secondary" onclick="logout()">Выйти</button>
-            </div>
-            <div class="login-prompt" id="login-prompt">
-                <span>Для редактирования </span>
-                <button class="btn btn-small btn-primary" onclick="showLoginModal()">Войти</button>
-            </div>
-        </div>
 
         <!-- Блок поиска -->
         <div class="search-panel">
@@ -50,6 +45,28 @@
 
         <div id="loading">Загрузка данных...</div>
         <div id="objects-list"></div>
+    </div>
+
+    <!-- Модальное окно авторизации -->
+    <div id="login-modal" class="modal-overlay">
+        <div class="modal modal-edit">
+            <h3>🔐 Авторизация</h3>
+            <form id="login-form">
+                <div class="form-group">
+                    <label>Имя пользователя</label>
+                    <input type="text" id="login-username" name="username" required autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label>Пароль</label>
+                    <input type="password" id="login-password" name="password" required autocomplete="current-password">
+                </div>
+                <div id="login-error" class="error-message" style="display: none;"></div>
+                <div class="modal-buttons">
+                    <button type="submit" class="btn btn-primary">Войти</button>
+                    <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
     </div>
 
     <!-- Модальное окно редактирования поступления -->
@@ -139,28 +156,6 @@
         </div>
     </div>
 
-    <!-- Модальное окно авторизации -->
-    <div id="login-modal" class="modal-overlay">
-        <div class="modal modal-edit">
-            <h3>🔐 Авторизация</h3>
-            <form id="login-form">
-                <div class="form-group">
-                    <label>Имя пользователя</label>
-                    <input type="text" id="login-username" name="username" required>
-                </div>
-                <div class="form-group">
-                    <label>Пароль</label>
-                    <input type="password" id="login-password" name="password" required>
-                </div>
-                <div id="login-error" class="error-message" style="display: none;"></div>
-                <div class="modal-buttons">
-                    <button type="submit" class="btn btn-primary">Войти</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Отмена</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script>
         let objectsCache = [];
         let sellersCache = [];
@@ -177,10 +172,12 @@
 
         document.addEventListener('DOMContentLoaded', () => {
             checkAuth();
+            loadConfig();
             loadObjects();
             loadSelectorsData();
             document.getElementById('edit-receipt-form').addEventListener('submit', handleReceiptSubmit);
             document.getElementById('edit-writeoff-form').addEventListener('submit', handleWriteoffSubmit);
+            document.getElementById('login-form').addEventListener('submit', handleLogin);
 
             document.getElementById('search-input').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
@@ -188,6 +185,143 @@
                 }
             });
         });
+
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/config');
+                const config = await response.json();
+
+                if (config.company_name) {
+                    document.getElementById('title-text').textContent = `Склад - ${config.company_name}`;
+                    document.getElementById('page-title').textContent = `Склад - ${config.company_name}`;
+                }
+
+                if (config.has_logo) {
+                    const logoImg = document.createElement('img');
+                    logoImg.src = '/static/logo';
+                    logoImg.alt = 'Logo';
+                    logoImg.className = 'header-logo';
+
+                    const titleLogo = document.getElementById('title-logo');
+                    titleLogo.innerHTML = '';
+                    titleLogo.appendChild(logoImg);
+
+                    // Обновляем favicon
+                    const favicon = document.getElementById('favicon');
+                    favicon.href = '/static/logo';
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+
+        
+
+        // ==================== AUTH ====================
+
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/check');
+                const data = await response.json();
+
+                if (data.authenticated) {
+                    currentUser = data.user;
+                } else {
+                    currentUser = null;
+                }
+                updateUIForAuth();
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                currentUser = null;
+                updateUIForAuth();
+            }
+        }
+
+        function updateUIForAuth() {
+            const authBtn = document.getElementById('auth-btn');
+            const authRequiredElements = document.querySelectorAll('.auth-required');
+            const adminRequiredElements = document.querySelectorAll('.admin-required');
+
+            if (currentUser) {
+                authBtn.textContent = `👤 ${currentUser.username}`;
+                authBtn.onclick = showUserMenu;
+                authBtn.classList.add('btn-logged-in');
+
+                authRequiredElements.forEach(el => el.style.display = 'inline-block');
+
+                if (currentUser.admin) {
+                    adminRequiredElements.forEach(el => el.style.display = 'inline-block');
+                } else {
+                    adminRequiredElements.forEach(el => el.style.display = 'none');
+                }
+            } else {
+                authBtn.textContent = '🔐 Войти';
+                authBtn.onclick = showLoginModal;
+                authBtn.classList.remove('btn-logged-in');
+
+                authRequiredElements.forEach(el => el.style.display = 'none');
+                adminRequiredElements.forEach(el => el.style.display = 'none');
+            }
+        }
+
+        function showLoginModal() {
+            document.getElementById('login-username').value = '';
+            document.getElementById('login-password').value = '';
+            document.getElementById('login-error').style.display = 'none';
+            document.getElementById('login-modal').classList.add('active');
+            document.getElementById('login-username').focus();
+        }
+
+        function closeLoginModal() {
+            document.getElementById('login-modal').classList.remove('active');
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.error) {
+                    document.getElementById('login-error').textContent = result.error;
+                    document.getElementById('login-error').style.display = 'block';
+                } else {
+                    closeLoginModal();
+                    currentUser = result.user;
+                    updateUIForAuth();
+                    refreshCurrentView();
+                    showMessage(true, 'Добро пожаловать!', `Вы вошли как ${result.user.username}`);
+                }
+            } catch (error) {
+                document.getElementById('login-error').textContent = 'Ошибка соединения';
+                document.getElementById('login-error').style.display = 'block';
+            }
+        }
+
+        function showUserMenu() {
+            if (confirm(`Выйти из аккаунта ${currentUser.username}?`)) {
+                logout();
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+                currentUser = null;
+                updateUIForAuth();
+                refreshCurrentView();
+                showMessage(true, 'До свидания!', 'Вы вышли из системы');
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        // ==================== DATA LOADING ====================
 
         async function loadSelectorsData() {
             const [objects, sellers, themes] = await Promise.all([
@@ -273,7 +407,6 @@
                     return;
                 }
 
-                // Сохраняем результаты поиска для подсветки
                 objects.forEach(obj => {
                     searchResults[obj.id] = {
                         match_field: obj.match_field,
@@ -285,7 +418,6 @@
 
                 listDiv.innerHTML = objects.map(obj => createObjectRow(obj, true)).join('');
 
-                // Загружаем детали и подсвечиваем
                 for (const obj of objects) {
                     await loadObjectDetails(obj.id);
                 }
@@ -461,6 +593,9 @@
                 return html + '<p class="no-data">Нет поступлений</p></div>';
             }
 
+            const showActions = currentUser !== null;
+            const actionsHeader = showActions ? '<th>Действия</th>' : '';
+
             html += `
                 <table class="details-table">
                     <tr>
@@ -476,7 +611,7 @@
                         <th>Вх. контроль</th>
                         <th>Дата вх. контроля</th>
                         <th>Место</th>
-                        <th>Действия</th>
+                        ${actionsHeader}
                     </tr>
             `;
 
@@ -486,7 +621,7 @@
 
                 let sellerObjectName = r.seller_object_name || '-';
                 let themeName = r.theme_name || '-';
-                let billNumber = createFileLink('bill', r.bill_id, r.bill_number, 
+                let billNumber = createFileLink('bill', r.bill_id, r.bill_number,
                     currentSearchType === 'bill' && isMatchedRow);
                 let invoiceNumber = createFileLink('invoice', r.invoice_id, r.invoice_number,
                     currentSearchType === 'invoice' && isMatchedRow);
@@ -499,6 +634,13 @@
                         themeName = `<span class="highlight">${themeName}</span>`;
                     }
                 }
+
+                const actionsCell = showActions ? `
+                    <td class="actions-cell">
+                        <button class="btn btn-small btn-edit" onclick="editReceipt(${r.id})" title="Редактировать">✏️</button>
+                        <button class="btn btn-small btn-delete" onclick="confirmDeleteReceipt(${r.id})" title="Удалить">🗑️</button>
+                    </td>
+                ` : '';
 
                 html += `
                     <tr class="${rowClass}">
@@ -514,10 +656,7 @@
                         <td>${createFileLink('entry_control', r.entry_control_id, r.entry_control_number)}</td>
                         <td>${r.entry_control_date || '-'}</td>
                         <td>${r.location || '-'}</td>
-                        <td class="actions-cell">
-                            <button class="btn btn-small btn-edit" onclick="editReceipt(${r.id})" title="Редактировать">✏️</button>
-                            <button class="btn btn-small btn-delete" onclick="confirmDeleteReceipt(${r.id})" title="Удалить">🗑️</button>
-                        </td>
+                        ${actionsCell}
                     </tr>
                 `;
             }
@@ -532,6 +671,9 @@
                 return html + '<p class="no-data">Нет списаний</p></div>';
             }
 
+            const showActions = currentUser !== null;
+            const actionsHeader = showActions ? '<th>Действия</th>' : '';
+
             html += `
                 <table class="details-table">
                     <tr>
@@ -539,7 +681,7 @@
                         <th>Наименование</th>
                         <th>Кол-во</th>
                         <th>Тема списания</th>
-                        <th>Действия</th>
+                        ${actionsHeader}
                     </tr>
             `;
 
@@ -554,16 +696,20 @@
                     }
                 }
 
+                const actionsCell = showActions ? `
+                    <td class="actions-cell">
+                        <button class="btn btn-small btn-edit" onclick="editWriteoff(${w.id})" title="Редактировать">✏️</button>
+                        <button class="btn btn-small btn-delete" onclick="confirmDeleteWriteoff(${w.id})" title="Удалить">🗑️</button>
+                    </td>
+                ` : '';
+
                 html += `
                     <tr class="${rowClass}">
                         <td>${w.object_name || '-'}</td>
                         <td>${w.seller_object_name || '-'}</td>
                         <td>${w.quantity}</td>
                         <td>${themeName}</td>
-                        <td class="actions-cell">
-                            <button class="btn btn-small btn-edit" onclick="editWriteoff(${w.id})" title="Редактировать">✏️</button>
-                            <button class="btn btn-small btn-delete" onclick="confirmDeleteWriteoff(${w.id})" title="Удалить">🗑️</button>
-                        </td>
+                        ${actionsCell}
                     </tr>
                 `;
             }
@@ -571,7 +717,14 @@
             return html + '</table></div>';
         }
 
+        // ==================== EDIT/DELETE ====================
+
         async function editReceipt(id) {
+            if (!currentUser) {
+                showMessage(false, 'Ошибка', 'Требуется авторизация');
+                return;
+            }
+
             const response = await fetch(`/api/receipt?id=${id}`);
             const receipt = await response.json();
 
@@ -615,6 +768,11 @@
         }
 
         async function editWriteoff(id) {
+            if (!currentUser) {
+                showMessage(false, 'Ошибка', 'Требуется авторизация');
+                return;
+            }
+
             const response = await fetch(`/api/writeoff?id=${id}`);
             const writeoff = await response.json();
 
@@ -655,6 +813,11 @@
         }
 
         function confirmDeleteReceipt(id) {
+            if (!currentUser) {
+                showMessage(false, 'Ошибка', 'Требуется авторизация');
+                return;
+            }
+
             currentDeleteType = 'receipt';
             currentDeleteId = id;
             document.getElementById('delete-message').textContent = 'Вы уверены, что хотите удалить это поступление?';
@@ -663,6 +826,11 @@
         }
 
         function confirmDeleteWriteoff(id) {
+            if (!currentUser) {
+                showMessage(false, 'Ошибка', 'Требуется авторизация');
+                return;
+            }
+
             currentDeleteType = 'writeoff';
             currentDeleteId = id;
             document.getElementById('delete-message').textContent = 'Вы уверены, что хотите удалить это списание?';
@@ -704,119 +872,6 @@
 
         function closeMessageModal() {
             document.getElementById('message-modal').classList.remove('active');
-        }
-
-        async function checkAuth() {
-    try {
-        const response = await fetch('/api/auth/check');
-        const data = await response.json();
-
-        if (data.authenticated) {
-            currentUser = data.user;
-            showUserInfo();
-        } else {
-            currentUser = null;
-            showLoginPrompt();
-        }
-        updateUIForAuth();
-    } catch (error) {
-        console.error('Auth check failed:', error);
-    }
-}
-
-        function showUserInfo() {
-            document.getElementById('user-info').style.display = 'flex';
-            document.getElementById('login-prompt').style.display = 'none';
-            document.getElementById('user-name').textContent = `👤 ${currentUser.username}${currentUser.admin ? ' (админ)' : ''}`;
-        }
-
-        function showLoginPrompt() {
-            document.getElementById('user-info').style.display = 'none';
-            document.getElementById('login-prompt').style.display = 'flex';
-        }
-
-        function updateUIForAuth() {
-            const addBtn = document.querySelector('a[href="/add"]');
-            const manageBtn = document.querySelector('a[href="/manage"]');
-            const headerButtons = document.querySelector('.header-buttons');
-
-            if (currentUser) {
-                if (addBtn) addBtn.style.display = 'inline-block';
-                if (manageBtn) manageBtn.style.display = 'inline-block';
-
-                // Добавляем кнопку управления пользователями для админа
-                if (currentUser.admin) {
-                    let usersBtn = document.querySelector('a[href="/users"]');
-                    if (!usersBtn && headerButtons) {
-                        usersBtn = document.createElement('a');
-                        usersBtn.href = '/users';
-                        usersBtn.className = 'btn btn-secondary';
-                        usersBtn.textContent = '👥 Пользователи';
-                        headerButtons.appendChild(usersBtn);
-                    }
-                }
-            } else {
-                if (addBtn) addBtn.style.display = 'none';
-                if (manageBtn) manageBtn.style.display = 'none';
-                const usersBtn = document.querySelector('a[href="/users"]');
-                if (usersBtn) usersBtn.remove();
-            }
-
-            // Скрываем/показываем кнопки редактирования в таблицах
-            document.querySelectorAll('.actions-cell').forEach(cell => {
-                cell.style.display = currentUser ? '' : 'none';
-            });
-        }
-
-        function showLoginModal() {
-            document.getElementById('login-username').value = '';
-            document.getElementById('login-password').value = '';
-            document.getElementById('login-error').style.display = 'none';
-            document.getElementById('login-modal').classList.add('active');
-            document.getElementById('login-username').focus();
-        }
-
-        function closeLoginModal() {
-            document.getElementById('login-modal').classList.remove('active');
-        }
-
-        document.getElementById('login-form').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const formData = new FormData(e.target);
-
-            try {
-                const response = await fetch('/api/auth/login', {
-                    method: 'POST',
-                    body: formData
-                });
-                const result = await response.json();
-
-                if (result.error) {
-                    document.getElementById('login-error').textContent = result.error;
-                    document.getElementById('login-error').style.display = 'block';
-                } else {
-                    closeLoginModal();
-                    currentUser = result.user;
-                    showUserInfo();
-                    updateUIForAuth();
-                    showMessage(true, 'Добро пожаловать!', `Вы вошли как ${result.user.username}`);
-                }
-            } catch (error) {
-                document.getElementById('login-error').textContent = 'Ошибка соединения';
-                document.getElementById('login-error').style.display = 'block';
-            }
-        });
-
-        async function logout() {
-            try {
-                await fetch('/api/auth/logout', { method: 'POST' });
-                currentUser = null;
-                showLoginPrompt();
-                updateUIForAuth();
-                showMessage(true, 'До свидания!', 'Вы вышли из системы');
-            } catch (error) {
-                showMessage(false, 'Ошибка', error.message);
-            }
         }
 
         document.querySelectorAll('.modal-overlay').forEach(overlay => {
