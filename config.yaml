@@ -8,3 +8,7 @@ database:
 server:
   host: localhost
   port: 8080
+
+company:
+  name: CompanyName
+  logo: /path/to/logo.png
