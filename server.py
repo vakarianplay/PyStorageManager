@@ -1,5 +1,6 @@
 import json
 import re
+import os
 import yaml
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
@@ -13,6 +14,7 @@ from auth import SessionManager
 class StorageHTTPHandler(BaseHTTPRequestHandler):
     handler = None
     session_manager = None
+    config = None
 
     def get_session_id(self):
         cookie_header = self.headers.get('Cookie', '')
@@ -70,6 +72,19 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
         except FileNotFoundError:
             self.send_error_json('File not found', 404)
 
+    def serve_binary_file(self, filepath, content_type):
+        try:
+            with open(filepath, 'rb') as f:
+                content = f.read()
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Content-Length', str(len(content)))
+            self.send_header('Cache-Control', 'public, max-age=86400')
+            self.end_headers()
+            self.wfile.write(content)
+        except FileNotFoundError:
+            self.send_error_json('File not found', 404)
+
     def serve_document_file(self, path):
         match = re.match(r'/api/file/(bill|invoice|entry_control)/(\d+)', path)
         if not match:
@@ -101,6 +116,19 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
         except ValueError as e:
             self.send_error_json(str(e), 404)
 
+    def get_logo_content_type(self, filepath):
+        ext = filepath.lower().split('.')[-1] if '.' in filepath else ''
+        content_types = {
+            'png': 'image/png',
+            'jpg': 'image/jpeg',
+            'jpeg': 'image/jpeg',
+            'gif': 'image/gif',
+            'svg': 'image/svg+xml',
+            'ico': 'image/x-icon',
+            'webp': 'image/webp'
+        }
+        return content_types.get(ext, 'image/png')
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
@@ -122,6 +150,21 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             if path in routes:
                 filepath, content_type = routes[path]
                 self.serve_file(filepath, content_type)
+            elif path == '/favicon.ico' or path == '/static/logo':
+                company_config = self.config.get('company', {})
+                logo_path = company_config.get('logo', '')
+                if logo_path and os.path.exists(logo_path):
+                    content_type = self.get_logo_content_type(logo_path)
+                    self.serve_binary_file(logo_path, content_type)
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+            elif path == '/api/config':
+                company_config = self.config.get('company', {})
+                self.send_json_response({
+                    'company_name': company_config.get('name', ''),
+                    'has_logo': bool(company_config.get('logo', '') and os.path.exists(company_config.get('logo', '')))
+                })
             elif path == '/api/auth/check':
                 session_id = self.get_session_id()
                 self.send_json_response(self.handler.get_current_user(session_id))
@@ -354,9 +397,14 @@ def run_server(config_path='config.yaml'):
 
     StorageHTTPHandler.handler = RequestHandler(db, manager, user_manager, session_manager)
     StorageHTTPHandler.session_manager = session_manager
+    StorageHTTPHandler.config = config
 
     server_address = (server_config['host'], server_config['port'])
     httpd = HTTPServer(server_address, StorageHTTPHandler)
+
+    company_name = config.get('company', {}).get('name', '')
+    if company_name:
+        print(f"Company: {company_name}")
 
     print(f"Server running at http://{server_config['host']}:{server_config['port']}")
 
