@@ -95,17 +95,25 @@ class StorageManager:
         return {'success': result}
 
     # Writeoffs
-    def create_writeoff(self, object_id, theme_id, quantity):
+    # В классе StorageManager заменить методы writeoff:
+
+    def create_writeoff(self, object_id, theme_id, quantity,
+                    writeoff_date, file_data, filename):
+        file_binary = psycopg2.Binary(file_data) if file_data else None
         new_id = self._db.call_function_scalar(
             'create_writeoff',
-            (object_id, theme_id, quantity)
+            (object_id, theme_id, quantity,
+            writeoff_date, file_binary, filename)
         )
         return {'id': new_id}
 
-    def update_writeoff(self, writeoff_id, object_id, theme_id, quantity):
+    def update_writeoff(self, writeoff_id, object_id, theme_id,
+                        quantity, writeoff_date, file_data, filename):
+        file_binary = psycopg2.Binary(file_data) if file_data else None
         result = self._db.call_function_scalar(
             'update_writeoff',
-            (writeoff_id, object_id, theme_id, quantity)
+            (writeoff_id, object_id, theme_id, quantity,
+            writeoff_date, file_binary, filename)
         )
         return {'success': result}
 
@@ -131,4 +139,26 @@ class UserManager:
 
     def delete_user(self, user_id):
         result = self._db.call_function_scalar('delete_user', (user_id,))
+        return {'success': result}
+    
+class PricingManager:
+    def __init__(self, db: Database):
+        self._db = db
+
+    def create_pricing(self, receipt_id, price, tax):
+        new_id = self._db.call_function_scalar(
+            'create_pricing',
+            (receipt_id, price, tax)
+        )
+        return {'id': new_id}
+
+    def update_pricing(self, pricing_id, price, tax):
+        result = self._db.call_function_scalar(
+            'update_pricing',
+            (pricing_id, price, tax)
+        )
+        return {'success': result}
+
+    def delete_pricing(self, pricing_id):
+        result = self._db.call_function_scalar('delete_pricing', (pricing_id,))
         return {'success': result}

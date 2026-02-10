@@ -7,7 +7,7 @@ from urllib.parse import urlparse, parse_qs
 from http.cookies import SimpleCookie
 
 from database import Database
-from manager import StorageManager, UserManager
+from manager import StorageManager, UserManager, PricingManager
 from handlers import RequestHandler, MultipartParser, FileHelper
 from auth import SessionManager
 
@@ -15,6 +15,7 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
     handler = None
     session_manager = None
     config = None
+    protocol_version = "HTTP/1.0"
 
     def get_session_id(self):
         cookie_header = self.headers.get('Cookie', '')
@@ -47,16 +48,27 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
         return user
 
     def send_json_response(self, data, status=200, session_id=None):
-        json_data = json.dumps(data, default=str, ensure_ascii=False)
+        json_data = json.dumps(
+            data, default=str, ensure_ascii=False
+        )
+        encoded = json_data.encode('utf-8')
+
         self.send_response(status)
-        self.send_header('Content-Type', 'application/json; charset=utf-8')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Type',
+                        'application/json; charset=utf-8')
+        self.send_header('Content-Length', str(len(encoded)))
+        self.send_header('Connection', 'close')
 
         if session_id:
-            self.send_header('Set-Cookie', f'session_id={session_id}; Path=/; HttpOnly; SameSite=Strict')
+            self.send_header(
+                'Set-Cookie',
+                f'session_id={session_id}; Path=/; '
+                f'HttpOnly; SameSite=Strict'
+            )
 
         self.end_headers()
-        self.wfile.write(json_data.encode('utf-8'))
+        self.wfile.write(encoded)
+        self.wfile.flush()
 
     def send_error_json(self, message, status=500):
         self.send_json_response({'error': message}, status)
@@ -86,7 +98,10 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             self.send_error_json('File not found', 404)
 
     def serve_document_file(self, path):
-        match = re.match(r'/api/file/(bill|invoice|entry_control)/(\d+)', path)
+        match = re.match(
+            r'/api/file/(bill|invoice|entry_control|writeoff)/(\d+)',
+            path
+        )
         if not match:
             self.send_error_json('Invalid file path', 400)
             return
@@ -99,7 +114,9 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             file_data = bytes(result['file'])
             filename = result.get('filename') or 'document'
 
-            content_type = FileHelper.detect_content_type(file_data, filename)
+            content_type = FileHelper.detect_content_type(
+                file_data, filename
+            )
             encoded_filename = FileHelper.encode_filename(filename)
 
             self.send_response(200)
@@ -107,9 +124,15 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             self.send_header('Content-Length', str(len(file_data)))
 
             if FileHelper.is_inline(content_type):
-                self.send_header('Content-Disposition', f"inline; filename*=UTF-8''{encoded_filename}")
+                self.send_header(
+                    'Content-Disposition',
+                    f"inline; filename*=UTF-8''{encoded_filename}"
+                )
             else:
-                self.send_header('Content-Disposition', f"attachment; filename*=UTF-8''{encoded_filename}")
+                self.send_header(
+                    'Content-Disposition',
+                    f"attachment; filename*=UTF-8''{encoded_filename}"
+                )
 
             self.end_headers()
             self.wfile.write(file_data)
@@ -228,23 +251,41 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     self.send_error_json('Missing user id', 400)
             elif path.startswith('/api/file/'):
                 self.serve_document_file(path)
-            else:
-                self.send_error_json('Not Found', 404)
+            elif path == '/api/pricing':
+                pricing_id = query.get('id', [None])[0]
+                receipt_id = query.get('receipt_id', [None])[0]
+                if pricing_id:
+                    self.send_json_response(self.handler.get_pricing(int(pricing_id)))
+                elif receipt_id:
+                    result = self.handler.get_pricing_by_receipt(int(receipt_id))
+                    self.send_json_response(result if result else {})
+                else:
+                    self.send_json_response(self.handler.get_all_pricing())
         except ValueError as e:
             self.send_error_json(str(e), 404)
         except Exception as e:
-            self.send_error_json(str(e), 500)
+                self.send_error_json(str(e), 500)
 
     def do_POST(self):
         path = urlparse(self.path).path
-        fields, files = MultipartParser.parse(self.headers, self.rfile)
+
+        # Гарантированно читаем ВСЁ тело запроса
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length) if content_length > 0 else b''
+
+        # Парсим тело
+        fields, files = MultipartParser.parse_body(
+            self.headers, body
+        )
 
         try:
             if path == '/api/auth/login':
                 username = fields.get('username', '')
                 password = fields.get('password', '')
                 result = self.handler.login(username, password)
-                self.send_json_response(result, session_id=result['session_id'])
+                self.send_json_response(
+                    result, session_id=result['session_id']
+                )
             elif path == '/api/auth/logout':
                 session_id = self.get_session_id()
                 self.handler.logout(session_id)
@@ -252,27 +293,45 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             elif path == '/api/object':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.create_object(fields))
+                self.send_json_response(
+                    self.handler.create_object(fields)
+                )
             elif path == '/api/seller':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.create_seller(fields))
+                self.send_json_response(
+                    self.handler.create_seller(fields)
+                )
             elif path == '/api/theme':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.create_theme(fields))
+                self.send_json_response(
+                    self.handler.create_theme(fields)
+                )
             elif path == '/api/receipt':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.create_receipt(fields, files))
+                self.send_json_response(
+                    self.handler.create_receipt(fields, files)
+                )
             elif path == '/api/writeoff':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.create_writeoff(fields))
+                self.send_json_response(
+                    self.handler.create_writeoff(fields, files)
+                )
+            elif path == '/api/pricing':
+                if not self.require_auth():
+                    return
+                self.send_json_response(
+                    self.handler.create_pricing(fields)
+                )
             elif path == '/api/user':
                 if not self.require_admin():
                     return
-                self.send_json_response(self.handler.create_user(fields))
+                self.send_json_response(
+                    self.handler.create_user(fields)
+                )
             else:
                 self.send_error_json('Not Found', 404)
         except ValueError as e:
@@ -282,33 +341,57 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         path = urlparse(self.path).path
-        fields, _ = MultipartParser.parse(self.headers, self.rfile)
+
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length) if content_length > 0 else b''
+
+        fields, files = MultipartParser.parse_body(
+            self.headers, body
+        )
 
         try:
             if path == '/api/object':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.update_object(fields))
+                self.send_json_response(
+                    self.handler.update_object(fields)
+                )
             elif path == '/api/seller':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.update_seller(fields))
+                self.send_json_response(
+                    self.handler.update_seller(fields)
+                )
             elif path == '/api/theme':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.update_theme(fields))
+                self.send_json_response(
+                    self.handler.update_theme(fields)
+                )
             elif path == '/api/receipt':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.update_receipt(fields))
+                self.send_json_response(
+                    self.handler.update_receipt(fields)
+                )
             elif path == '/api/writeoff':
                 if not self.require_auth():
                     return
-                self.send_json_response(self.handler.update_writeoff(fields))
+                self.send_json_response(
+                    self.handler.update_writeoff(fields, files)
+                )
+            elif path == '/api/pricing':
+                if not self.require_auth():
+                    return
+                self.send_json_response(
+                    self.handler.update_pricing(fields)
+                )
             elif path == '/api/user':
                 if not self.require_admin():
                     return
-                self.send_json_response(self.handler.update_user(fields))
+                self.send_json_response(
+                    self.handler.update_user(fields)
+                )
             else:
                 self.send_error_json('Not Found', 404)
         except ValueError as e:
@@ -321,13 +404,19 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = parse_qs(parsed.query)
 
+        content_length = int(self.headers.get('Content-Length', 0))
+        if content_length > 0:
+            self.rfile.read(content_length)
+
         try:
             if path == '/api/object':
                 if not self.require_auth():
                     return
                 object_id = query.get('id', [None])[0]
                 if object_id:
-                    self.send_json_response(self.handler.delete_object(int(object_id)))
+                    self.send_json_response(
+                        self.handler.delete_object(int(object_id))
+                    )
                 else:
                     self.send_error_json('Missing object id', 400)
             elif path == '/api/seller':
@@ -335,7 +424,9 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     return
                 seller_id = query.get('id', [None])[0]
                 if seller_id:
-                    self.send_json_response(self.handler.delete_seller(int(seller_id)))
+                    self.send_json_response(
+                        self.handler.delete_seller(int(seller_id))
+                    )
                 else:
                     self.send_error_json('Missing seller id', 400)
             elif path == '/api/theme':
@@ -343,7 +434,9 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     return
                 theme_id = query.get('id', [None])[0]
                 if theme_id:
-                    self.send_json_response(self.handler.delete_theme(int(theme_id)))
+                    self.send_json_response(
+                        self.handler.delete_theme(int(theme_id))
+                    )
                 else:
                     self.send_error_json('Missing theme id', 400)
             elif path == '/api/receipt':
@@ -351,7 +444,9 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     return
                 receipt_id = query.get('id', [None])[0]
                 if receipt_id:
-                    self.send_json_response(self.handler.delete_receipt(int(receipt_id)))
+                    self.send_json_response(
+                        self.handler.delete_receipt(int(receipt_id))
+                    )
                 else:
                     self.send_error_json('Missing receipt id', 400)
             elif path == '/api/writeoff':
@@ -359,26 +454,51 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     return
                 writeoff_id = query.get('id', [None])[0]
                 if writeoff_id:
-                    self.send_json_response(self.handler.delete_writeoff(int(writeoff_id)))
+                    self.send_json_response(
+                        self.handler.delete_writeoff(
+                            int(writeoff_id)
+                        )
+                    )
                 else:
-                    self.send_error_json('Missing writeoff id', 400)
+                    self.send_error_json(
+                        'Missing writeoff id', 400
+                    )
+            elif path == '/api/pricing':
+                if not self.require_auth():
+                    return
+                pricing_id = query.get('id', [None])[0]
+                if pricing_id:
+                    self.send_json_response(
+                        self.handler.delete_pricing(
+                            int(pricing_id)
+                        )
+                    )
+                else:
+                    self.send_error_json(
+                        'Missing pricing id', 400
+                    )
             elif path == '/api/user':
                 if not self.require_admin():
                     return
                 user_id = query.get('id', [None])[0]
                 if user_id:
-                    self.send_json_response(self.handler.delete_user(int(user_id)))
+                    self.send_json_response(
+                        self.handler.delete_user(int(user_id))
+                    )
                 else:
                     self.send_error_json('Missing user id', 400)
             else:
                 self.send_error_json('Not Found', 404)
-        except ValueError as e:
-            self.send_error_json(str(e), 400)
         except Exception as e:
-            self.send_error_json(str(e), 500)
+            error_msg = str(e)
+            # Извлекаем понятное сообщение из ошибки PostgreSQL
+            if 'CONTEXT' in error_msg:
+                error_msg = error_msg.split('\n')[0]
+            self.send_error_json(error_msg, 400)
 
     def log_message(self, format, *args):
         pass
+        # print(f"[{self.log_date_time_string()}] {args[0]}")
 
 def load_config(config_path='config.yaml'):
     with open(config_path, 'r', encoding='utf-8') as f:
@@ -394,8 +514,9 @@ def run_server(config_path='config.yaml'):
     manager = StorageManager(db)
     user_manager = UserManager(db)
     session_manager = SessionManager()
+    pricing_manager = PricingManager(db)
 
-    StorageHTTPHandler.handler = RequestHandler(db, manager, user_manager, session_manager)
+    StorageHTTPHandler.handler = RequestHandler(db, manager, user_manager, session_manager, pricing_manager)
     StorageHTTPHandler.session_manager = session_manager
     StorageHTTPHandler.config = config
 
@@ -405,6 +526,7 @@ def run_server(config_path='config.yaml'):
     company_name = config.get('company', {}).get('name', '')
     if company_name:
         print(f"Company: {company_name}")
+        print(f"Database: {config.get('database', {}).get('host', '')}  {config.get('database', {}).get('name', '')}")
 
     print(f"Server running at http://{server_config['host']}:{server_config['port']}")
 

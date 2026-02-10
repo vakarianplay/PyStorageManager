@@ -4,11 +4,12 @@ from urllib.parse import quote
 from auth import SessionManager
 
 class RequestHandler:
-    def __init__(self, db, manager, user_manager, session_manager):
+    def __init__(self, db, manager, user_manager, session_manager, pricing_manager=None):
         self.db = db
         self.manager = manager
         self.user_manager = user_manager
         self.session_manager = session_manager
+        self.pricing_manager = pricing_manager
 
     # Auth handlers
     def login(self, username, password):
@@ -273,7 +274,10 @@ class RequestHandler:
                        f'Накладная: {fields.get("invoiceNumber", "-")}'
         }
 
-    def create_writeoff(self, fields):
+    def create_writeoff(self, fields, files=None):
+        if files is None:
+            files = {}
+
         object_id = fields.get('objectId')
         theme_id = fields.get('themeId')
 
@@ -282,12 +286,26 @@ class RequestHandler:
             theme_id = result['id']
 
         quantity = int(fields.get('quantity', 0))
+        writeoff_date = fields.get('writeoffDate') or None
 
-        result = self.manager.create_writeoff(object_id, theme_id, quantity)
+        doc_info = files.get('writeoffDocument', {})
+        file_data = doc_info.get('data')
+        filename = doc_info.get('filename')
+
+        # Если файл пустой (не выбран), обнуляем
+        if file_data is not None and len(file_data) == 0:
+            file_data = None
+            filename = None
+
+        result = self.manager.create_writeoff(
+            object_id, theme_id, quantity,
+            writeoff_date, file_data, filename
+        )
         return {
             'success': True,
             'id': result['id'],
-            'message': f'Списание успешно зарегистрировано!\n\nКоличество: {quantity} шт.'
+            'message': f'Списание успешно зарегистрировано!\n\n'
+                    f'Количество: {quantity} шт.'
         }
 
     # UPDATE handlers
@@ -338,13 +356,24 @@ class RequestHandler:
             'message': 'Поступление успешно обновлено'
         }
 
-    def update_writeoff(self, fields):
+    def update_writeoff(self, fields, files=None):
+        if files is None:
+            files = {}
+
         writeoff_id = int(fields.get('id'))
         object_id = int(fields.get('objectId'))
         theme_id = int(fields.get('themeId'))
         quantity = int(fields.get('quantity'))
+        writeoff_date = fields.get('writeoffDate')
 
-        self.manager.update_writeoff(writeoff_id, object_id, theme_id, quantity)
+        doc_info = files.get('writeoffDocument', {})
+        file_data = doc_info.get('data')
+        filename = doc_info.get('filename')
+
+        self.manager.update_writeoff(
+            writeoff_id, object_id, theme_id, quantity,
+            writeoff_date, file_data, filename
+        )
         return {
             'success': True,
             'message': 'Списание успешно обновлено'
@@ -385,49 +414,133 @@ class RequestHandler:
             'success': True,
             'message': 'Списание успешно удалено'
         }
+        
+    # Pricing handlers
+    def get_all_pricing(self):
+        pricing = self.db.get_all_pricing()
+        return [dict(p) for p in pricing]
+
+    def get_pricing(self, pricing_id):
+        pricing = self.db.get_pricing_by_id(pricing_id)
+        if pricing:
+            return dict(pricing)
+        raise ValueError('Pricing not found')
+
+    def get_pricing_by_receipt(self, receipt_id):
+        pricing = self.db.get_pricing_by_receipt(receipt_id)
+        if pricing:
+            return dict(pricing)
+        return None
+
+    def create_pricing(self, fields):
+        receipt_id = int(fields.get('receiptId'))
+        price = float(fields.get('price'))
+        tax = float(fields.get('tax', 20.0))
+
+        existing = self.db.get_pricing_by_receipt(receipt_id)
+        if existing:
+            raise ValueError('Цена для этого поступления уже существует')
+
+        result = self.pricing_manager.create_pricing(receipt_id, price, tax)
+        return {
+            'success': True,
+            'id': result['id'],
+            'message': 'Цена успешно добавлена'
+        }
+
+    def update_pricing(self, fields):
+        pricing_id = int(fields.get('id'))
+        price = float(fields.get('price'))
+        tax = float(fields.get('tax'))
+
+        self.pricing_manager.update_pricing(pricing_id, price, tax)
+        return {
+            'success': True,
+            'message': 'Цена успешно обновлена'
+        }
+
+    def delete_pricing(self, pricing_id):
+        self.pricing_manager.delete_pricing(pricing_id)
+        return {
+            'success': True,
+            'message': 'Цена успешно удалена'
+        }
 
 class MultipartParser:
     @staticmethod
     def parse(headers, rfile):
+        """Старый метод — читает rfile сам."""
+        content_length = int(headers.get('Content-Length', 0))
+        if content_length == 0:
+            return {}, {}
+        body = rfile.read(content_length)
+        return MultipartParser.parse_body(headers, body)
+
+    @staticmethod
+    def parse_body(headers, body):
+        """Новый метод — принимает уже прочитанное тело."""
+        if not body:
+            return {}, {}
+
         content_type = headers.get('Content-Type', '')
 
         if 'multipart/form-data' not in content_type:
-            content_length = int(headers.get('Content-Length', 0))
-            body = rfile.read(content_length)
-            if body:
+            try:
                 return json.loads(body.decode('utf-8')), {}
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return {}, {}
+
+        # Извлекаем boundary
+        boundary = None
+        for part in content_type.split(';'):
+            part = part.strip()
+            if part.startswith('boundary='):
+                boundary = part.split('=', 1)[1].strip()
+                break
+
+        if not boundary:
             return {}, {}
 
-        boundary = content_type.split('boundary=')[1].encode()
-        content_length = int(headers.get('Content-Length', 0))
-        body = rfile.read(content_length)
+        boundary = boundary.encode()
 
         fields = {}
         files = {}
 
         parts = body.split(b'--' + boundary)
         for part in parts:
-            if not part or part == b'--\r\n' or part == b'--':
+            if not part or part.strip() in (
+                b'', b'--', b'--\r\n'
+            ):
                 continue
 
             if b'\r\n\r\n' not in part:
                 continue
 
             headers_raw, content = part.split(b'\r\n\r\n', 1)
-            content = content.rstrip(b'\r\n')
 
-            headers_text = headers_raw.decode('utf-8', errors='ignore')
+            if content.endswith(b'\r\n'):
+                content = content[:-2]
 
-            name_match = re.search(r'name="([^"]+)"', headers_text)
-            filename_match = re.search(r'filename="([^"]+)"', headers_text)
+            headers_text = headers_raw.decode(
+                'utf-8', errors='ignore'
+            )
+
+            name_match = re.search(
+                r'name="([^"]+)"', headers_text
+            )
+            filename_match = re.search(
+                r'filename="([^"]*)"', headers_text
+            )
 
             if name_match:
                 field_name = name_match.group(1)
                 if filename_match:
-                    files[field_name] = {
-                        'filename': filename_match.group(1),
-                        'data': content
-                    }
+                    fname = filename_match.group(1)
+                    if fname and len(content) > 0:
+                        files[field_name] = {
+                            'filename': fname,
+                            'data': content
+                        }
                 else:
                     fields[field_name] = content.decode('utf-8')
 
