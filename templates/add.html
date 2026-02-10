@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Склад - Добавление</title>
     <link rel="stylesheet" href="/static/style.css">
+    <style>
+        .field-error {
+            border-color: #e74c3c !important;
+            box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.25) !important;
+        }
+        .field-error-message {
+            color: #e74c3c;
+            font-size: 12px;
+            margin-top: 2px;
+            display: none;
+        }
+        .field-error-message.visible {
+            display: block;
+        }
+        .form-group.has-error label {
+            color: #e74c3c;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -21,158 +39,249 @@
             <button class="tab" onclick="showTab('theme')">Тема</button>
         </div>
 
+        <!-- ==================== ПОСТУПЛЕНИЕ ==================== -->
         <div id="tab-receipt" class="tab-content active">
-            <form id="receipt-form" class="form-card">
+            <div class="form-card">
                 <h3>Новое поступление</h3>
 
-                <div class="form-group">
-                    <label>Объект на складе</label>
-                    <select id="objectId" name="objectId">
-                        <option value="">-- Выберите или создайте новый --</option>
-                    </select>
-                    <input type="text" id="newObjectName" name="newObjectName" placeholder="Или введите новый объект">
+                <div class="form-row">
+                    <div class="form-group flex-2" id="fg-r-object">
+                        <label>Объект на складе *</label>
+                        <select id="r-objectId">
+                            <option value="">-- Выберите или создайте новый --</option>
+                        </select>
+                        <input type="text" id="r-newObjectName" placeholder="Или введите новый объект">
+                        <div class="field-error-message" id="err-r-object">Выберите объект или введите новый</div>
+                    </div>
+                    <div class="form-group flex-1" id="fg-r-quantity">
+                        <label>Количество *</label>
+                        <input type="number" id="r-quantity" min="1" oninput="calculateTotal(); clearError('fg-r-quantity')">
+                        <div class="field-error-message" id="err-r-quantity">Укажите количество</div>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Наименование у поставщика</label>
-                    <input type="text" name="sellerObjectName" required>
+                <div class="form-group" id="fg-r-sellerObjectName">
+                    <label>Наименование у поставщика *</label>
+                    <input type="text" id="r-sellerObjectName" oninput="clearError('fg-r-sellerObjectName')">
+                    <div class="field-error-message" id="err-r-sellerObjectName">Введите наименование</div>
                 </div>
 
-                <div class="form-group">
-                    <label>Количество</label>
-                    <input type="number" name="quantity" min="1" required>
+                <div class="price-block">
+                    <h4>💰 Стоимость (необязательно)</h4>
+                    <div class="form-row">
+                        <div class="form-group flex-1">
+                            <label>Цена за шт. (без НДС)</label>
+                            <input type="number" id="r-price" step="0.01" min="0" placeholder="0.00" oninput="calculateTotal()">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>НДС (%)</label>
+                            <select id="r-tax" onchange="calculateTotal()">
+                                <option value="0">0%</option>
+                                <option value="10">10%</option>
+                                <option value="20" selected>20%</option>
+                            </select>
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>Цена с НДС</label>
+                            <input type="text" id="r-priceWithTax" readonly class="calculated-field">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>Сумма</label>
+                            <input type="text" id="r-totalPrice" readonly class="calculated-field total-field">
+                        </div>
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Поставщик</label>
-                    <select id="sellerId" name="sellerId">
+                <div class="form-group" id="fg-r-seller">
+                    <label>Поставщик *</label>
+                    <select id="r-sellerId" onchange="clearError('fg-r-seller')">
                         <option value="">-- Выберите или создайте нового --</option>
                     </select>
-                    <div class="new-seller-fields" style="display: none;">
-                        <input type="text" name="newSellerName" placeholder="Название компании">
-                        <input type="text" name="newSellerInn" placeholder="ИНН">
-                        <input type="text" name="newSellerKpp" placeholder="КПП">
+                    <div id="new-seller-fields" style="display: none;">
+                        <input type="text" id="r-newSellerName" placeholder="Название компании" oninput="clearError('fg-r-seller')">
+                        <input type="text" id="r-newSellerInn" placeholder="ИНН">
+                        <input type="text" id="r-newSellerKpp" placeholder="КПП">
                     </div>
                     <button type="button" class="btn btn-small" onclick="toggleNewSeller()">+ Новый поставщик</button>
+                    <div class="field-error-message" id="err-r-seller">Выберите поставщика или создайте нового</div>
                 </div>
 
-                <div class="form-group">
-                    <label>Тема</label>
-                    <select id="themeId" name="themeId">
+                <div class="form-group" id="fg-r-theme">
+                    <label>Тема *</label>
+                    <select id="r-themeId" onchange="clearError('fg-r-theme')">
                         <option value="">-- Выберите или создайте новую --</option>
                     </select>
-                    <input type="text" name="newThemeName" placeholder="Или введите новую тему">
+                    <input type="text" id="r-newThemeName" placeholder="Или введите новую тему" oninput="clearError('fg-r-theme')">
+                    <div class="field-error-message" id="err-r-theme">Выберите тему или введите новую</div>
                 </div>
 
-                <div class="form-group">
-                    <label>Счёт (номер и файл)</label>
-                    <input type="text" name="billNumber" placeholder="Номер счёта" required>
-                    <input type="date" name="billDate" required>
-                    <input type="file" name="billFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                <div class="form-row">
+                    <div class="form-group flex-1" id="fg-r-billNumber">
+                        <label>Счёт (номер) *</label>
+                        <input type="text" id="r-billNumber" placeholder="Номер счёта" oninput="clearError('fg-r-billNumber')">
+                        <div class="field-error-message">Введите номер счёта</div>
+                    </div>
+                    <div class="form-group flex-1" id="fg-r-billDate">
+                        <label>Дата счёта *</label>
+                        <input type="date" id="r-billDate" onchange="clearError('fg-r-billDate')">
+                        <div class="field-error-message">Укажите дату счёта</div>
+                    </div>
+                    <div class="form-group flex-1">
+                        <label>Файл счёта</label>
+                        <input type="file" id="r-billFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Накладная (номер и файл)</label>
-                    <input type="text" name="invoiceNumber" placeholder="Номер накладной" required>
-                    <input type="date" name="invoiceDate" required>
-                    <input type="file" name="invoiceFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                <div class="form-row">
+                    <div class="form-group flex-1" id="fg-r-invoiceNumber">
+                        <label>Накладная (номер) *</label>
+                        <input type="text" id="r-invoiceNumber" placeholder="Номер накладной" oninput="clearError('fg-r-invoiceNumber')">
+                        <div class="field-error-message">Введите номер накладной</div>
+                    </div>
+                    <div class="form-group flex-1" id="fg-r-invoiceDate">
+                        <label>Дата накладной *</label>
+                        <input type="date" id="r-invoiceDate" onchange="clearError('fg-r-invoiceDate')">
+                        <div class="field-error-message">Укажите дату накладной</div>
+                    </div>
+                    <div class="form-group flex-1">
+                        <label>Файл накладной</label>
+                        <input type="file" id="r-invoiceFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Входной контроль (номер и файл)</label>
-                    <input type="text" name="entryControlNumber" placeholder="Номер" required>
-                    <input type="date" name="entryControlDate" required>
-                    <input type="file" name="entryControlFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                <div class="form-row">
+                    <div class="form-group flex-1" id="fg-r-ecNumber">
+                        <label>Входной контроль (номер) *</label>
+                        <input type="text" id="r-entryControlNumber" placeholder="Номер" oninput="clearError('fg-r-ecNumber')">
+                        <div class="field-error-message">Введите номер вх. контроля</div>
+                    </div>
+                    <div class="form-group flex-1" id="fg-r-ecDate">
+                        <label>Дата вх. контроля *</label>
+                        <input type="date" id="r-entryControlDate" onchange="clearError('fg-r-ecDate')">
+                        <div class="field-error-message">Укажите дату вх. контроля</div>
+                    </div>
+                    <div class="form-group flex-1">
+                        <label>Файл вх. контроля</label>
+                        <input type="file" id="r-entryControlFile" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                    </div>
                 </div>
 
-                <div class="form-group">
-                    <label>Место хранения</label>
-                    <input type="text" name="location" placeholder="Склад А">
+                <div class="form-group" id="fg-r-location">
+                    <label>Место хранения *</label>
+                    <input type="text" id="r-location" placeholder="Склад А" oninput="clearError('fg-r-location')">
+                    <div class="field-error-message">Укажите место хранения</div>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Сохранить поступление</button>
-            </form>
+                <button type="button" class="btn btn-primary btn-large" onclick="submitReceipt()">
+                    Сохранить поступление
+                </button>
+            </div>
         </div>
 
+        <!-- ==================== СПИСАНИЕ ==================== -->
         <div id="tab-writeoff" class="tab-content">
-            <form id="writeoff-form" class="form-card">
+            <div class="form-card">
                 <h3>Новое списание</h3>
 
-                <div class="form-group">
-                    <label>Объект на складе</label>
-                    <select id="writeoffObjectId" name="objectId" required>
+                <div class="form-group" id="fg-w-objectId">
+                    <label>Объект на складе *</label>
+                    <select id="w-objectId" onchange="clearError('fg-w-objectId')">
                         <option value="">-- Выберите объект --</option>
                     </select>
+                    <div class="field-error-message">Выберите объект</div>
+                </div>
+
+                <div class="form-group" id="fg-w-date">
+                    <label>Дата списания *</label>
+                    <input type="date" id="w-date" onchange="clearError('fg-w-date')">
+                    <div class="field-error-message">Укажите дату списания</div>
                 </div>
 
                 <div class="form-group">
-                    <label>Тема списания</label>
-                    <select id="writeoffThemeId" name="themeId">
+                    <label>Документ</label>
+                    <input type="file" id="w-document" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                </div>
+
+                <div class="form-group" id="fg-w-quantity">
+                    <label>Количество *</label>
+                    <input type="number" id="w-quantity" min="1" oninput="clearError('fg-w-quantity')">
+                    <div class="field-error-message">Укажите количество</div>
+                </div>
+
+                <div class="form-group" id="fg-w-theme">
+                    <label>Тема списания *</label>
+                    <select id="w-themeId" onchange="clearError('fg-w-theme')">
                         <option value="">-- Выберите или создайте новую --</option>
                     </select>
-                    <input type="text" name="newThemeName" placeholder="Или введите новую тему">
+                    <input type="text" id="w-newThemeName" placeholder="Или введите новую тему" oninput="clearError('fg-w-theme')">
+                    <div class="field-error-message">Выберите тему или введите новую</div>
                 </div>
 
-                <div class="form-group">
-                    <label>Количество</label>
-                    <input type="number" name="quantity" min="1" required>
-                </div>
-
-                <button type="submit" class="btn btn-primary">Сохранить списание</button>
-            </form>
+                <button type="button" class="btn btn-primary btn-large" onclick="submitWriteoff()">
+                    Сохранить списание
+                </button>
+            </div>
         </div>
 
+        <!-- ==================== ОБЪЕКТ ==================== -->
         <div id="tab-object" class="tab-content">
-            <form id="object-form" class="form-card">
+            <div class="form-card">
                 <h3>Новый объект на складе</h3>
-
-                <div class="form-group">
-                    <label>Наименование объекта</label>
-                    <input type="text" name="objectName" required>
+                <div class="form-group" id="fg-o-objectName">
+                    <label>Наименование объекта *</label>
+                    <input type="text" id="o-objectName" oninput="clearError('fg-o-objectName')">
+                    <div class="field-error-message">Введите наименование</div>
                 </div>
-
-                <button type="submit" class="btn btn-primary">Создать объект</button>
-            </form>
+                <button type="button" class="btn btn-primary btn-large" onclick="submitObject()">
+                    Создать объект
+                </button>
+            </div>
         </div>
 
+        <!-- ==================== ПОСТАВЩИК ==================== -->
         <div id="tab-seller" class="tab-content">
-            <form id="seller-form" class="form-card">
+            <div class="form-card">
                 <h3>Новый поставщик</h3>
-
-                <div class="form-group">
-                    <label>Название компании</label>
-                    <input type="text" name="name" required>
+                <div class="form-group" id="fg-s-name">
+                    <label>Название компании *</label>
+                    <input type="text" id="s-name" oninput="clearError('fg-s-name')">
+                    <div class="field-error-message">Введите название</div>
                 </div>
-
-                <div class="form-group">
-                    <label>ИНН</label>
-                    <input type="text" name="inn" required>
+                <div class="form-row">
+                    <div class="form-group flex-1" id="fg-s-inn">
+                        <label>ИНН *</label>
+                        <input type="text" id="s-inn" oninput="clearError('fg-s-inn')">
+                        <div class="field-error-message">Введите ИНН</div>
+                    </div>
+                    <div class="form-group flex-1" id="fg-s-kpp">
+                        <label>КПП *</label>
+                        <input type="text" id="s-kpp" oninput="clearError('fg-s-kpp')">
+                        <div class="field-error-message">Введите КПП</div>
+                    </div>
                 </div>
-
-                <div class="form-group">
-                    <label>КПП</label>
-                    <input type="text" name="kpp" required>
-                </div>
-
-                <button type="submit" class="btn btn-primary">Создать поставщика</button>
-            </form>
+                <button type="button" class="btn btn-primary btn-large" onclick="submitSeller()">
+                    Создать поставщика
+                </button>
+            </div>
         </div>
 
+        <!-- ==================== ТЕМА ==================== -->
         <div id="tab-theme" class="tab-content">
-            <form id="theme-form" class="form-card">
+            <div class="form-card">
                 <h3>Новая тема</h3>
-
-                <div class="form-group">
-                    <label>Название темы</label>
-                    <input type="text" name="name" required>
+                <div class="form-group" id="fg-t-name">
+                    <label>Название темы *</label>
+                    <input type="text" id="t-name" oninput="clearError('fg-t-name')">
+                    <div class="field-error-message">Введите название темы</div>
                 </div>
-
-                <button type="submit" class="btn btn-primary">Создать тему</button>
-            </form>
+                <button type="button" class="btn btn-primary btn-large" onclick="submitTheme()">
+                    Создать тему
+                </button>
+            </div>
         </div>
     </div>
 
-    <!-- Модальное окно -->
+    <!-- Модальное окно сообщения -->
     <div id="modal-overlay" class="modal-overlay">
         <div class="modal">
             <div class="modal-icon" id="modal-icon">✓</div>
@@ -183,12 +292,82 @@
     </div>
 
     <script>
+        let isSubmitting = false;
+
         document.addEventListener('DOMContentLoaded', () => {
+            checkAuth();
             loadSelectors();
-            setupForms();
+            calculateTotal();
         });
 
+        // ==================== VALIDATION ====================
+        function setError(groupId) {
+            const group = document.getElementById(groupId);
+            if (!group) return;
+            group.classList.add('has-error');
+            const inputs = group.querySelectorAll('input, select');
+            inputs.forEach(input => input.classList.add('field-error'));
+            const msg = group.querySelector('.field-error-message');
+            if (msg) msg.classList.add('visible');
+        }
+
+        function clearError(groupId) {
+            const group = document.getElementById(groupId);
+            if (!group) return;
+            group.classList.remove('has-error');
+            const inputs = group.querySelectorAll('input, select');
+            inputs.forEach(input => input.classList.remove('field-error'));
+            const msg = group.querySelector('.field-error-message');
+            if (msg) msg.classList.remove('visible');
+        }
+
+        function clearAllErrors() {
+            document.querySelectorAll('.has-error').forEach(el => {
+                el.classList.remove('has-error');
+            });
+            document.querySelectorAll('.field-error').forEach(el => {
+                el.classList.remove('field-error');
+            });
+            document.querySelectorAll('.field-error-message.visible').forEach(el => {
+                el.classList.remove('visible');
+            });
+        }
+
+        function validateField(groupId, value) {
+            const val = (value || '').toString().trim();
+            if (!val) {
+                setError(groupId);
+                return false;
+            }
+            clearError(groupId);
+            return true;
+        }
+
+        function scrollToFirstError() {
+            const firstError = document.querySelector('.has-error');
+            if (firstError) {
+                firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                const input = firstError.querySelector('input, select');
+                if (input) input.focus();
+            }
+        }
+
+        // ==================== AUTH ====================
+        async function checkAuth() {
+            try {
+                const response = await fetch('/api/auth/check');
+                const data = await response.json();
+                if (!data.authenticated) {
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                window.location.href = '/';
+            }
+        }
+
+        // ==================== TABS ====================
         function showTab(tabName) {
+            clearAllErrors();
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
             document.querySelector(`[onclick="showTab('${tabName}')"]`).classList.add('active');
@@ -196,31 +375,56 @@
         }
 
         function toggleNewSeller() {
-            const fields = document.querySelector('.new-seller-fields');
+            const fields = document.getElementById('new-seller-fields');
             fields.style.display = fields.style.display === 'none' ? 'block' : 'none';
         }
 
-        async function loadSelectors() {
-            const [objects, sellers, themes] = await Promise.all([
-                fetch('/api/objects').then(r => r.json()),
-                fetch('/api/sellers').then(r => r.json()),
-                fetch('/api/themes').then(r => r.json())
-            ]);
+        // ==================== PRICE CALC ====================
+        function calculateTotal() {
+            const quantity = parseFloat(document.getElementById('r-quantity').value) || 0;
+            const price = parseFloat(document.getElementById('r-price').value) || 0;
+            const tax = parseFloat(document.getElementById('r-tax').value) || 0;
 
-            populateSelect('objectId', objects, 'id', 'objectname');
-            populateSelect('writeoffObjectId', objects, 'id', 'objectname');
-            populateSelect('sellerId', sellers, 'id', 'name');
-            populateSelect('themeId', themes, 'id', 'name');
-            populateSelect('writeoffThemeId', themes, 'id', 'name');
+            const priceWithTax = price * (1 + tax / 100);
+            const total = priceWithTax * quantity;
+
+            document.getElementById('r-priceWithTax').value =
+                price > 0 ? formatCurrency(priceWithTax) : '';
+            document.getElementById('r-totalPrice').value =
+                price > 0 && quantity > 0 ? formatCurrency(total) : '';
+        }
+
+        function formatCurrency(value) {
+            return new Intl.NumberFormat('ru-RU', {
+                style: 'currency',
+                currency: 'RUB'
+            }).format(value);
+        }
+
+        // ==================== SELECTORS ====================
+        async function loadSelectors() {
+            try {
+                const [objects, sellers, themes] = await Promise.all([
+                    fetch('/api/objects').then(r => r.json()),
+                    fetch('/api/sellers').then(r => r.json()),
+                    fetch('/api/themes').then(r => r.json())
+                ]);
+
+                populateSelect('r-objectId', objects, 'id', 'objectname');
+                populateSelect('w-objectId', objects, 'id', 'objectname');
+                populateSelect('r-sellerId', sellers, 'id', 'name');
+                populateSelect('r-themeId', themes, 'id', 'name');
+                populateSelect('w-themeId', themes, 'id', 'name');
+            } catch (error) {
+                console.error('Failed to load selectors:', error);
+            }
         }
 
         function populateSelect(selectId, items, valueKey, textKey) {
             const select = document.getElementById(selectId);
             if (!select) return;
 
-            const currentValue = select.value;
             const firstOption = select.querySelector('option');
-
             select.innerHTML = '';
             if (firstOption) select.appendChild(firstOption);
 
@@ -230,58 +434,342 @@
                 option.textContent = item[textKey];
                 select.appendChild(option);
             });
-
-            select.value = currentValue;
         }
 
-        function setupForms() {
-            document.getElementById('receipt-form').addEventListener('submit', e => {
-                e.preventDefault();
-                submitForm('/api/receipt', new FormData(e.target), e.target);
-            });
+        // ==================== SUBMIT: RECEIPT ====================
+        async function submitReceipt() {
+            if (isSubmitting) return;
+            clearAllErrors();
 
-            document.getElementById('writeoff-form').addEventListener('submit', e => {
-                e.preventDefault();
-                submitForm('/api/writeoff', new FormData(e.target), e.target);
-            });
+            const objectId = document.getElementById('r-objectId').value;
+            const newObjectName = document.getElementById('r-newObjectName').value.trim();
+            const quantity = document.getElementById('r-quantity').value;
+            const sellerObjectName = document.getElementById('r-sellerObjectName').value.trim();
+            const sellerId = document.getElementById('r-sellerId').value;
+            const newSellerName = document.getElementById('r-newSellerName').value.trim();
+            const themeId = document.getElementById('r-themeId').value;
+            const newThemeName = document.getElementById('r-newThemeName').value.trim();
+            const billNumber = document.getElementById('r-billNumber').value.trim();
+            const billDate = document.getElementById('r-billDate').value;
+            const invoiceNumber = document.getElementById('r-invoiceNumber').value.trim();
+            const invoiceDate = document.getElementById('r-invoiceDate').value;
+            const ecNumber = document.getElementById('r-entryControlNumber').value.trim();
+            const ecDate = document.getElementById('r-entryControlDate').value;
+            const location = document.getElementById('r-location').value.trim();
 
-            document.getElementById('object-form').addEventListener('submit', e => {
-                e.preventDefault();
-                submitForm('/api/object', new FormData(e.target), e.target);
-            });
+            let isValid = true;
 
-            document.getElementById('seller-form').addEventListener('submit', e => {
-                e.preventDefault();
-                submitForm('/api/seller', new FormData(e.target), e.target);
-            });
+            if (!objectId && !newObjectName) {
+                setError('fg-r-object');
+                isValid = false;
+            }
+            if (!validateField('fg-r-quantity', quantity)) isValid = false;
+            if (!validateField('fg-r-sellerObjectName', sellerObjectName)) isValid = false;
+            if (!sellerId && !newSellerName) {
+                setError('fg-r-seller');
+                isValid = false;
+            }
+            if (!themeId && !newThemeName) {
+                setError('fg-r-theme');
+                isValid = false;
+            }
+            if (!validateField('fg-r-billNumber', billNumber)) isValid = false;
+            if (!validateField('fg-r-billDate', billDate)) isValid = false;
+            if (!validateField('fg-r-invoiceNumber', invoiceNumber)) isValid = false;
+            if (!validateField('fg-r-invoiceDate', invoiceDate)) isValid = false;
+            if (!validateField('fg-r-ecNumber', ecNumber)) isValid = false;
+            if (!validateField('fg-r-ecDate', ecDate)) isValid = false;
+            if (!validateField('fg-r-location', location)) isValid = false;
 
-            document.getElementById('theme-form').addEventListener('submit', e => {
-                e.preventDefault();
-                submitForm('/api/theme', new FormData(e.target), e.target);
-            });
-        }
+            if (!isValid) {
+                scrollToFirstError();
+                return;
+            }
 
-        async function submitForm(url, formData, form) {
+            isSubmitting = true;
+
+            const formData = new FormData();
+            formData.append('objectId', objectId);
+            formData.append('newObjectName', newObjectName);
+            formData.append('sellerObjectName', sellerObjectName);
+            formData.append('quantity', quantity);
+            formData.append('sellerId', sellerId);
+            formData.append('newSellerName', newSellerName);
+            formData.append('newSellerInn', document.getElementById('r-newSellerInn').value);
+            formData.append('newSellerKpp', document.getElementById('r-newSellerKpp').value);
+            formData.append('themeId', themeId);
+            formData.append('newThemeName', newThemeName);
+            formData.append('billNumber', billNumber);
+            formData.append('billDate', billDate);
+            formData.append('invoiceNumber', invoiceNumber);
+            formData.append('invoiceDate', invoiceDate);
+            formData.append('entryControlNumber', ecNumber);
+            formData.append('entryControlDate', ecDate);
+            formData.append('location', location);
+
+            const billFile = document.getElementById('r-billFile');
+            if (billFile.files.length > 0) formData.append('billFile', billFile.files[0]);
+
+            const invoiceFile = document.getElementById('r-invoiceFile');
+            if (invoiceFile.files.length > 0) formData.append('invoiceFile', invoiceFile.files[0]);
+
+            const ecFile = document.getElementById('r-entryControlFile');
+            if (ecFile.files.length > 0) formData.append('entryControlFile', ecFile.files[0]);
+
+            const price = document.getElementById('r-price').value;
+            const tax = document.getElementById('r-tax').value;
+
             try {
-                const response = await fetch(url, {
+                const response = await fetch('/api/receipt', {
                     method: 'POST',
                     body: formData
                 });
+                const result = await response.json();
 
+                if (result.error) {
+                    showModal(false, 'Ошибка', result.error);
+                    isSubmitting = false;
+                    return;
+                }
+
+                if (price && parseFloat(price) > 0) {
+                    const pricingData = new FormData();
+                    pricingData.append('receiptId', result.id);
+                    pricingData.append('price', price);
+                    pricingData.append('tax', tax);
+
+                    await fetch('/api/pricing', {
+                        method: 'POST',
+                        body: pricingData
+                    });
+                }
+
+                showModal(true, 'Успешно!', result.message);
+                clearReceiptForm();
+                loadSelectors();
+            } catch (error) {
+                showModal(false, 'Ошибка', error.message);
+            } finally {
+                isSubmitting = false;
+            }
+        }
+
+        function clearReceiptForm() {
+            const ids = [
+                'r-objectId', 'r-newObjectName', 'r-sellerObjectName',
+                'r-quantity', 'r-price', 'r-priceWithTax', 'r-totalPrice',
+                'r-sellerId', 'r-newSellerName', 'r-newSellerInn',
+                'r-newSellerKpp', 'r-themeId', 'r-newThemeName',
+                'r-billNumber', 'r-billDate', 'r-billFile',
+                'r-invoiceNumber', 'r-invoiceDate', 'r-invoiceFile',
+                'r-entryControlNumber', 'r-entryControlDate',
+                'r-entryControlFile', 'r-location'
+            ];
+            ids.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = el.tagName === 'SELECT' ? '' : '';
+            });
+            document.getElementById('r-tax').value = '20';
+            clearAllErrors();
+        }
+
+        // ==================== SUBMIT: WRITEOFF ====================
+        async function submitWriteoff() {
+            if (isSubmitting) return;
+            clearAllErrors();
+
+            const objectId = document.getElementById('w-objectId').value;
+            const writeoffDate = document.getElementById('w-date').value;
+            const quantity = document.getElementById('w-quantity').value;
+            const themeId = document.getElementById('w-themeId').value;
+            const newThemeName = document.getElementById('w-newThemeName').value.trim();
+            const fileInput = document.getElementById('w-document');
+
+            let isValid = true;
+
+            if (!validateField('fg-w-objectId', objectId)) isValid = false;
+            if (!validateField('fg-w-date', writeoffDate)) isValid = false;
+            if (!validateField('fg-w-quantity', quantity)) isValid = false;
+            if (!themeId && !newThemeName) {
+                setError('fg-w-theme');
+                isValid = false;
+            }
+
+            if (!isValid) {
+                scrollToFirstError();
+                return;
+            }
+
+            isSubmitting = true;
+
+            const formData = new FormData();
+            formData.append('objectId', objectId);
+            formData.append('writeoffDate', writeoffDate);
+            formData.append('quantity', quantity);
+            formData.append('themeId', themeId);
+            formData.append('newThemeName', newThemeName);
+
+            if (fileInput.files.length > 0) {
+                formData.append('writeoffDocument', fileInput.files[0]);
+            }
+
+            try {
+                const response = await fetch('/api/writeoff', {
+                    method: 'POST',
+                    body: formData
+                });
                 const result = await response.json();
 
                 if (result.error) {
                     showModal(false, 'Ошибка', result.error);
                 } else {
                     showModal(true, 'Успешно!', result.message);
-                    form.reset();
+                    clearWriteoffForm();
                     loadSelectors();
                 }
             } catch (error) {
                 showModal(false, 'Ошибка', error.message);
+            } finally {
+                isSubmitting = false;
             }
         }
 
+        function clearWriteoffForm() {
+            document.getElementById('w-objectId').value = '';
+            document.getElementById('w-date').value = '';
+            document.getElementById('w-document').value = '';
+            document.getElementById('w-quantity').value = '';
+            document.getElementById('w-themeId').value = '';
+            document.getElementById('w-newThemeName').value = '';
+            clearAllErrors();
+        }
+
+        // ==================== SUBMIT: OBJECT ====================
+        async function submitObject() {
+            if (isSubmitting) return;
+            clearAllErrors();
+
+            const objectName = document.getElementById('o-objectName').value.trim();
+
+            if (!validateField('fg-o-objectName', objectName)) {
+                scrollToFirstError();
+                return;
+            }
+
+            isSubmitting = true;
+
+            const formData = new FormData();
+            formData.append('objectName', objectName);
+
+            try {
+                const response = await fetch('/api/object', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.error) {
+                    showModal(false, 'Ошибка', result.error);
+                } else {
+                    showModal(true, 'Успешно!', result.message);
+                    document.getElementById('o-objectName').value = '';
+                    loadSelectors();
+                }
+            } catch (error) {
+                showModal(false, 'Ошибка', error.message);
+            } finally {
+                isSubmitting = false;
+            }
+        }
+
+        // ==================== SUBMIT: SELLER ====================
+        async function submitSeller() {
+            if (isSubmitting) return;
+            clearAllErrors();
+
+            const name = document.getElementById('s-name').value.trim();
+            const inn = document.getElementById('s-inn').value.trim();
+            const kpp = document.getElementById('s-kpp').value.trim();
+
+            let isValid = true;
+            if (!validateField('fg-s-name', name)) isValid = false;
+            if (!validateField('fg-s-inn', inn)) isValid = false;
+            if (!validateField('fg-s-kpp', kpp)) isValid = false;
+
+            if (!isValid) {
+                scrollToFirstError();
+                return;
+            }
+
+            isSubmitting = true;
+
+            const formData = new FormData();
+            formData.append('name', name);
+            formData.append('inn', inn);
+            formData.append('kpp', kpp);
+
+            try {
+                const response = await fetch('/api/seller', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.error) {
+                    showModal(false, 'Ошибка', result.error);
+                } else {
+                    showModal(true, 'Успешно!', result.message);
+                    document.getElementById('s-name').value = '';
+                    document.getElementById('s-inn').value = '';
+                    document.getElementById('s-kpp').value = '';
+                    loadSelectors();
+                }
+            } catch (error) {
+                showModal(false, 'Ошибка', error.message);
+            } finally {
+                isSubmitting = false;
+            }
+        }
+
+        // ==================== SUBMIT: THEME ====================
+        async function submitTheme() {
+            if (isSubmitting) return;
+            clearAllErrors();
+
+            const name = document.getElementById('t-name').value.trim();
+
+            if (!validateField('fg-t-name', name)) {
+                scrollToFirstError();
+                return;
+            }
+
+            isSubmitting = true;
+
+            const formData = new FormData();
+            formData.append('name', name);
+
+            try {
+                const response = await fetch('/api/theme', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.error) {
+                    showModal(false, 'Ошибка', result.error);
+                } else {
+                    showModal(true, 'Успешно!', result.message);
+                    document.getElementById('t-name').value = '';
+                    loadSelectors();
+                }
+            } catch (error) {
+                showModal(false, 'Ошибка', error.message);
+            } finally {
+                isSubmitting = false;
+            }
+        }
+
+        // ==================== MODAL ====================
         function showModal(success, title, message) {
             const overlay = document.getElementById('modal-overlay');
             const icon = document.getElementById('modal-icon');
@@ -302,6 +790,12 @@
 
         document.getElementById('modal-overlay').addEventListener('click', e => {
             if (e.target.classList.contains('modal-overlay')) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') {
                 closeModal();
             }
         });

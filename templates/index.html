@@ -22,13 +22,12 @@
             </div>
         </div>
 
-
         <!-- Блок поиска -->
         <div class="search-panel">
             <div class="search-row">
                 <select id="search-type" class="search-select" onchange="onSearchTypeChange()">
-                    <option value="name">Название</option>
-                    <option value="seller_name">Наименование</option>
+                    <option value="name">Наименование по КД</option>
+                    <option value="seller_name">Наименование по накладной</option>
                     <option value="theme">Тема</option>
                     <option value="bill">Номер счёта</option>
                     <option value="invoice">Номер накладной</option>
@@ -80,7 +79,7 @@
                     <select id="receipt-object-id" name="objectId" required></select>
                 </div>
                 <div class="form-group">
-                    <label>Наименование у поставщика</label>
+                    <label>Наименование по накладной</label>
                     <input type="text" id="receipt-seller-object-name" name="sellerObjectName" required>
                 </div>
                 <div class="form-group">
@@ -115,19 +114,65 @@
                 <input type="hidden" id="writeoff-id" name="id">
                 <div class="form-group">
                     <label>Объект</label>
-                    <select id="writeoff-object-id" name="objectId" required></select>
+                    <select id="writeoff-object-id" name="objectId"
+                            required></select>
+                </div>
+                <div class="form-group">
+                    <label>Дата списания</label>
+                    <input type="date" id="writeoff-date"
+                        name="writeoffDate" required>
+                </div>
+                <div class="form-group">
+                    <label>Документ</label>
+                    <input type="file" id="writeoff-document"
+                        name="writeoffDocument"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                    <small id="writeoff-doc-info"
+                        style="color: #666;"></small>
                 </div>
                 <div class="form-group">
                     <label>Количество</label>
-                    <input type="number" id="writeoff-quantity" name="quantity" min="1" required>
+                    <input type="number" id="writeoff-quantity"
+                        name="quantity" min="1" required>
                 </div>
                 <div class="form-group">
                     <label>Тема списания</label>
-                    <select id="writeoff-theme-id" name="themeId" required></select>
+                    <select id="writeoff-theme-id" name="themeId"
+                            required></select>
+                </div>
+                <div class="modal-buttons">
+                    <button type="submit"
+                            class="btn btn-primary">Сохранить</button>
+                    <button type="button" class="btn btn-secondary"
+                            onclick="closeWriteoffModal()">Отмена</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Модальное окно редактирования цены -->
+    <div id="pricing-modal" class="modal-overlay">
+        <div class="modal modal-edit">
+            <h3 id="pricing-modal-title">Добавить цену</h3>
+            <form id="pricing-form">
+                <input type="hidden" id="pricing-id" name="id">
+                <input type="hidden" id="pricing-receipt-id" name="receiptId">
+                <div class="form-group">
+                    <label>Цена за шт. без НДС (₽)</label>
+                    <input type="number" id="pricing-price" name="price" step="0.01" min="0" required>
+                </div>
+                <div class="form-group">
+                    <label>Ставка НДС (%)</label>
+                    <select id="pricing-tax" name="tax" required>
+                        <option value="0">0%</option>
+                        <option value="10">10%</option>
+                        <option value="20">20%</option>
+                        <option value="22" selected>22%</option>
+                    </select>
                 </div>
                 <div class="modal-buttons">
                     <button type="submit" class="btn btn-primary">Сохранить</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeWriteoffModal()">Отмена</button>
+                    <button type="button" class="btn btn-secondary" onclick="closePricingModal()">Отмена</button>
                 </div>
             </form>
         </div>
@@ -157,6 +202,7 @@
     </div>
 
     <script>
+        // ==================== GLOBAL VARIABLES ====================
         let objectsCache = [];
         let sellersCache = [];
         let themesCache = [];
@@ -170,22 +216,43 @@
         let currentSearchType = '';
         let currentUser = null;
 
+        // ==================== INITIALIZATION ====================
         document.addEventListener('DOMContentLoaded', () => {
-            checkAuth();
             loadConfig();
+            checkAuth();
             loadObjects();
             loadSelectorsData();
+
             document.getElementById('edit-receipt-form').addEventListener('submit', handleReceiptSubmit);
             document.getElementById('edit-writeoff-form').addEventListener('submit', handleWriteoffSubmit);
             document.getElementById('login-form').addEventListener('submit', handleLogin);
+            document.getElementById('pricing-form').addEventListener('submit', handlePricingSubmit);
 
             document.getElementById('search-input').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
                     performSearch();
                 }
             });
+
+            // Закрытие модальных окон
+            document.querySelectorAll('.modal-overlay').forEach(overlay => {
+                overlay.addEventListener('click', (e) => {
+                    if (e.target === overlay) {
+                        overlay.classList.remove('active');
+                    }
+                });
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    document.querySelectorAll('.modal-overlay.active').forEach(modal => {
+                        modal.classList.remove('active');
+                    });
+                }
+            });
         });
 
+        // ==================== CONFIG ====================
         async function loadConfig() {
             try {
                 const response = await fetch('/api/config');
@@ -206,7 +273,6 @@
                     titleLogo.innerHTML = '';
                     titleLogo.appendChild(logoImg);
 
-                    // Обновляем favicon
                     const favicon = document.getElementById('favicon');
                     favicon.href = '/static/logo';
                 }
@@ -215,10 +281,7 @@
             }
         }
 
-        
-
         // ==================== AUTH ====================
-
         async function checkAuth() {
             try {
                 const response = await fetch('/api/auth/check');
@@ -322,22 +385,85 @@
         }
 
         // ==================== DATA LOADING ====================
-
         async function loadSelectorsData() {
-            const [objects, sellers, themes] = await Promise.all([
-                fetch('/api/objects').then(r => r.json()),
-                fetch('/api/sellers').then(r => r.json()),
-                fetch('/api/themes').then(r => r.json())
-            ]);
-            objectsCache = objects;
-            sellersCache = sellers;
-            themesCache = themes;
+            try {
+                const [objects, sellers, themes] = await Promise.all([
+                    fetch('/api/objects').then(r => r.json()),
+                    fetch('/api/sellers').then(r => r.json()),
+                    fetch('/api/themes').then(r => r.json())
+                ]);
+                objectsCache = objects;
+                sellersCache = sellers;
+                themesCache = themes;
 
-            const themeSelect = document.getElementById('search-theme-select');
-            themeSelect.innerHTML = '<option value="">-- Выберите тему --</option>' +
-                themes.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+                const themeSelect = document.getElementById('search-theme-select');
+                themeSelect.innerHTML = '<option value="">-- Выберите тему --</option>' +
+                    themes.map(t => `<option value="${t.id}">${t.name}</option>`).join('');
+            } catch (error) {
+                console.error('Failed to load selectors:', error);
+            }
         }
 
+        async function loadObjects() {
+            const loadingDiv = document.getElementById('loading');
+            const listDiv = document.getElementById('objects-list');
+
+            try {
+                const response = await fetch('/api/objects');
+                const objects = await response.json();
+                objectsCache = objects;
+
+                loadingDiv.style.display = 'none';
+
+                if (objects.length === 0) {
+                    listDiv.innerHTML = '<p class="no-data">Нет объектов на складе</p>';
+                    return;
+                }
+
+                listDiv.innerHTML = objects.map(obj => createObjectRow(obj, false)).join('');
+
+                for (const objectId of expandedObjects) {
+                    const detailsDiv = document.getElementById(`details-${objectId}`);
+                    const icon = document.getElementById(`icon-${objectId}`);
+                    if (detailsDiv && icon) {
+                        detailsDiv.style.display = 'block';
+                        icon.textContent = '▼';
+                        loadObjectDetails(objectId);
+                    }
+                }
+            } catch (error) {
+                loadingDiv.textContent = 'Ошибка загрузки: ' + error.message;
+            }
+        }
+
+        async function loadObjectDetails(objectId) {
+            const detailsDiv = document.getElementById(`details-${objectId}`);
+
+            try {
+                const response = await fetch(`/api/object_details?id=${objectId}`);
+                const details = await response.json();
+
+                const searchInfo = searchResults[objectId] || {};
+                detailsDiv.innerHTML = renderReceipts(details.receipts, searchInfo) + renderWriteoffs(details.writeoffs, searchInfo);
+            } catch (error) {
+                detailsDiv.innerHTML = '<p class="error">Ошибка загрузки: ' + error.message + '</p>';
+            }
+        }
+
+        async function refreshCurrentView() {
+            const scrollPosition = window.scrollY;
+
+            if (isSearchActive) {
+                await performSearch();
+            } else {
+                await loadObjects();
+            }
+            await loadSelectorsData();
+
+            window.scrollTo(0, scrollPosition);
+        }
+
+        // ==================== SEARCH ====================
         function onSearchTypeChange() {
             const searchType = document.getElementById('search-type').value;
             const searchInput = document.getElementById('search-input');
@@ -421,7 +547,6 @@
                 for (const obj of objects) {
                     await loadObjectDetails(obj.id);
                 }
-
             } catch (error) {
                 loadingDiv.textContent = 'Ошибка поиска: ' + error.message;
             }
@@ -443,55 +568,7 @@
             await loadObjects();
         }
 
-        function highlightText(text, searchTerm) {
-            if (!text || !searchTerm || !isSearchActive) return text;
-            const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
-            return text.replace(regex, '<span class="highlight">$1</span>');
-        }
-
-        function escapeRegex(string) {
-            return string.replace(/[.*+?^${}()|[\]\\]/g, '\$&');
-        }
-
-        function populateSelect(selectId, items, valueKey, textKey, selectedValue = null) {
-            const select = document.getElementById(selectId);
-            select.innerHTML = items.map(item =>
-                `<option value="${item[valueKey]}" ${item[valueKey] == selectedValue ? 'selected' : ''}>${item[textKey]}</option>`
-            ).join('');
-        }
-
-        async function loadObjects() {
-            const loadingDiv = document.getElementById('loading');
-            const listDiv = document.getElementById('objects-list');
-
-            try {
-                const response = await fetch('/api/objects');
-                const objects = await response.json();
-                objectsCache = objects;
-
-                loadingDiv.style.display = 'none';
-
-                if (objects.length === 0) {
-                    listDiv.innerHTML = '<p class="no-data">Нет объектов на складе</p>';
-                    return;
-                }
-
-                listDiv.innerHTML = objects.map(obj => createObjectRow(obj, false)).join('');
-
-                for (const objectId of expandedObjects) {
-                    const detailsDiv = document.getElementById(`details-${objectId}`);
-                    const icon = document.getElementById(`icon-${objectId}`);
-                    if (detailsDiv && icon) {
-                        detailsDiv.style.display = 'block';
-                        icon.textContent = '▼';
-                        loadObjectDetails(objectId);
-                    }
-                }
-            } catch (error) {
-                loadingDiv.textContent = 'Ошибка загрузки: ' + error.message;
-            }
-        }
-
+        // ==================== RENDER FUNCTIONS ====================
         function createObjectRow(obj, autoExpand = false) {
             const name = obj.objectname || obj.object_name || 'Без названия';
             const balanceClass = obj.balance > 0 ? 'positive' : (obj.balance < 0 ? 'negative' : 'zero');
@@ -532,60 +609,6 @@
             `;
         }
 
-        async function toggleDetails(objectId) {
-            const detailsDiv = document.getElementById(`details-${objectId}`);
-            const icon = document.getElementById(`icon-${objectId}`);
-
-            if (detailsDiv.style.display === 'none') {
-                detailsDiv.style.display = 'block';
-                icon.textContent = '▼';
-                expandedObjects.add(objectId);
-                currentObjectId = objectId;
-                await loadObjectDetails(objectId);
-            } else {
-                detailsDiv.style.display = 'none';
-                icon.textContent = '▶';
-                expandedObjects.delete(objectId);
-            }
-        }
-
-        async function loadObjectDetails(objectId) {
-            const detailsDiv = document.getElementById(`details-${objectId}`);
-
-            try {
-                const response = await fetch(`/api/object_details?id=${objectId}`);
-                const details = await response.json();
-
-                const searchInfo = searchResults[objectId] || {};
-                detailsDiv.innerHTML = renderReceipts(details.receipts, searchInfo) + renderWriteoffs(details.writeoffs, searchInfo);
-
-            } catch (error) {
-                detailsDiv.innerHTML = '<p class="error">Ошибка загрузки: ' + error.message + '</p>';
-            }
-        }
-
-        async function refreshCurrentView() {
-            const scrollPosition = window.scrollY;
-
-            if (isSearchActive) {
-                await performSearch();
-            } else {
-                await loadObjects();
-            }
-            await loadSelectorsData();
-
-            window.scrollTo(0, scrollPosition);
-        }
-
-        function createFileLink(type, id, number, shouldHighlight = false) {
-            if (!id || !number) return '-';
-            let displayNumber = number;
-            if (shouldHighlight) {
-                displayNumber = highlightText(number, currentSearchTerm);
-            }
-            return `<a href="/api/file/${type}/${id}" target="_blank">${displayNumber}</a>`;
-        }
-
         function renderReceipts(receipts, searchInfo) {
             let html = '<div class="section"><h3>📥 Поступления</h3>';
 
@@ -597,22 +620,26 @@
             const actionsHeader = showActions ? '<th>Действия</th>' : '';
 
             html += `
-                <table class="details-table">
-                    <tr>
-                        <th>Название</th>
-                        <th>Наименование</th>
-                        <th>Кол-во</th>
-                        <th>Поставщик</th>
-                        <th>Тема</th>
-                        <th>Счёт</th>
-                        <th>Дата счёта</th>
-                        <th>Накладная</th>
-                        <th>Дата накладной</th>
-                        <th>Вх. контроль</th>
-                        <th>Дата вх. контроля</th>
-                        <th>Место</th>
-                        ${actionsHeader}
-                    </tr>
+                <table class="details-table receipts-table">
+                    <thead>
+                        <tr>
+                            <th class="col-expand"></th>
+                            <!-- <th>Наим. по КД</th> -->
+                            <th>Наим. по накладной</th>
+                            <th>Кол-во</th>
+                            <th>Поставщик</th>
+                            <th>Тема</th>
+                            <th>Счёт</th>
+                            <th>Дата счёта</th>
+                            <th>Накладная</th>
+                            <th>Дата накладной</th>
+                            <th>Вх. контроль</th>
+                            <th>Дата вх. контроля</th>
+                            <th>Место</th>
+                            ${actionsHeader}
+                        </tr>
+                    </thead>
+                    <tbody>
             `;
 
             for (const r of receipts) {
@@ -635,16 +662,26 @@
                     }
                 }
 
+                const hasPrice = r.price !== null && r.price !== undefined;
+                const expandIcon = hasPrice ? '<span class="price-indicator">🔶</span>' : '';
+                const rowClickable = hasPrice ? 'clickable-row' : '';
+
                 const actionsCell = showActions ? `
                     <td class="actions-cell">
-                        <button class="btn btn-small btn-edit" onclick="editReceipt(${r.id})" title="Редактировать">✏️</button>
-                        <button class="btn btn-small btn-delete" onclick="confirmDeleteReceipt(${r.id})" title="Удалить">🗑️</button>
+                        <button class="btn btn-small btn-edit" onclick="event.stopPropagation(); editReceipt(${r.id});" title="Редактировать">✏️</button>
+                        <button class="btn btn-small ${hasPrice ? 'btn-price-edit' : 'btn-price-add'}" 
+                                onclick="event.stopPropagation(); ${hasPrice ? `editPricing(${r.id})` : `addPricing(${r.id})`};" 
+                                title="${hasPrice ? 'Редактировать цену' : 'Добавить цену'}">💰</button>
+                        <button class="btn btn-small btn-delete" onclick="event.stopPropagation(); confirmDeleteReceipt(${r.id});" title="Удалить">🗑️</button>
                     </td>
                 ` : '';
 
+                const rowOnClick = hasPrice ? `onclick="togglePricingRow(${r.id})"` : '';
+
                 html += `
-                    <tr class="${rowClass}">
-                        <td>${r.object_name || '-'}</td>
+                    <tr class="${rowClass} ${rowClickable}" ${rowOnClick}>
+                        <td class="col-expand">${expandIcon}</td>
+                        <!-- <td>${r.object_name || '-'}</td> -->
                         <td>${sellerObjectName}</td>
                         <td>${r.quantity}</td>
                         <td>${r.seller_name || '-'}</td>
@@ -659,9 +696,48 @@
                         ${actionsCell}
                     </tr>
                 `;
+
+                if (hasPrice) {
+                    const colSpan = showActions ? 14 : 13;
+                    const priceWithTax = formatCurrency(r.price_with_tax);
+                    const totalPrice = formatCurrency(r.total_price);
+                    const totalPriceWithTax = formatCurrency(r.total_price_with_tax);
+
+                    html += `
+                        <tr class="pricing-row" id="pricing-row-${r.id}" style="display: none;">
+                            <td colspan="${colSpan}">
+                                <div class="pricing-details">
+                                    <div class="pricing-grid">
+                                        <div class="pricing-item">
+                                            <span class="pricing-label">Цена за шт. (без НДС)</span>
+                                            <span class="pricing-value">${formatCurrency(r.price)}</span>
+                                        </div>
+                                        <div class="pricing-item">
+                                            <span class="pricing-label">НДС</span>
+                                            <span class="pricing-value">${r.tax}%</span>
+                                        </div>
+                                        <div class="pricing-item">
+                                            <span class="pricing-label">Цена с НДС</span>
+                                            <span class="pricing-value">${priceWithTax}</span>
+                                        </div>
+                                        <div class="pricing-item">
+                                            <span class="pricing-label">Сумма без НДС</span>
+                                            <span class="pricing-value">${totalPrice}</span>
+                                        </div>
+                                        <div class="pricing-item highlight-total">
+                                            <span class="pricing-label">Итого с НДС</span>
+                                            <span class="pricing-value">${totalPriceWithTax}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                    `;
+                }
             }
 
-            return html + '</table></div>';
+            html += '</tbody></table></div>';
+            return html;
         }
 
         function renderWriteoffs(writeoffs, searchInfo) {
@@ -676,13 +752,16 @@
 
             html += `
                 <table class="details-table">
-                    <tr>
-                        <th>Название</th>
-                        <th>Наименование</th>
-                        <th>Кол-во</th>
-                        <th>Тема списания</th>
-                        ${actionsHeader}
-                    </tr>
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Документ</th>
+                            <th>Количество</th>
+                            <th>Тема списания</th>
+                            ${actionsHeader}
+                        </tr>
+                    </thead>
+                    <tbody>
             `;
 
             for (const w of writeoffs) {
@@ -690,23 +769,41 @@
                 let rowClass = '';
 
                 if (currentSearchType === 'theme') {
-                    if (w.theme_name && w.theme_name.toLowerCase() === currentSearchTerm.toLowerCase()) {
-                        themeName = `<span class="highlight">${themeName}</span>`;
+                    if (w.theme_name &&
+                        w.theme_name.toLowerCase() ===
+                        currentSearchTerm.toLowerCase()) {
+                        themeName =
+                            `<span class="highlight">${themeName}</span>`;
                         rowClass = 'row-highlighted';
                     }
                 }
 
+                const dateDisplay = w.writeoff_date || '-';
+
+                let documentDisplay = '-';
+                    if (w.has_document && w.document_filename) {
+                        documentDisplay =
+                            `<a href="/api/file/writeoff/${w.id}" ` +
+                            `target="_blank" ` +
+                            `onclick="event.stopPropagation();">` +
+                            `${w.document_filename}</a>`;
+                    }
+
                 const actionsCell = showActions ? `
                     <td class="actions-cell">
-                        <button class="btn btn-small btn-edit" onclick="editWriteoff(${w.id})" title="Редактировать">✏️</button>
-                        <button class="btn btn-small btn-delete" onclick="confirmDeleteWriteoff(${w.id})" title="Удалить">🗑️</button>
+                        <button class="btn btn-small btn-edit"
+                            onclick="editWriteoff(${w.id})"
+                            title="Редактировать">✏️</button>
+                        <button class="btn btn-small btn-delete"
+                            onclick="confirmDeleteWriteoff(${w.id})"
+                            title="Удалить">🗑️</button>
                     </td>
                 ` : '';
 
                 html += `
                     <tr class="${rowClass}">
-                        <td>${w.object_name || '-'}</td>
-                        <td>${w.seller_object_name || '-'}</td>
+                        <td>${dateDisplay}</td>
+                        <td>${documentDisplay}</td>
                         <td>${w.quantity}</td>
                         <td>${themeName}</td>
                         ${actionsCell}
@@ -714,29 +811,102 @@
                 `;
             }
 
-            return html + '</table></div>';
+            html += '</tbody></table></div>';
+            return html;
         }
 
-        // ==================== EDIT/DELETE ====================
+        // ==================== HELPERS ====================
+        function toggleDetails(objectId) {
+            const detailsDiv = document.getElementById(`details-${objectId}`);
+            const icon = document.getElementById(`icon-${objectId}`);
 
+            if (detailsDiv.style.display === 'none') {
+                detailsDiv.style.display = 'block';
+                icon.textContent = '▼';
+                expandedObjects.add(objectId);
+                currentObjectId = objectId;
+                loadObjectDetails(objectId);
+            } else {
+                detailsDiv.style.display = 'none';
+                icon.textContent = '▶';
+                expandedObjects.delete(objectId);
+            }
+        }
+
+        function togglePricingRow(receiptId) {
+            const pricingRow = document.getElementById(`pricing-row-${receiptId}`);
+            if (!pricingRow) return;
+
+            const isVisible = pricingRow.style.display !== 'none';
+
+            // Закрываем все открытые строки с ценами
+            document.querySelectorAll('.pricing-row').forEach(row => {
+                row.style.display = 'none';
+            });
+
+            // Если строка была скрыта — показываем её
+            if (!isVisible) {
+                pricingRow.style.display = 'table-row';
+            }
+        }
+
+        function createFileLink(type, id, number, shouldHighlight = false) {
+            if (!id || !number) return '-';
+            let displayNumber = number;
+            if (shouldHighlight) {
+                displayNumber = highlightText(number, currentSearchTerm);
+            }
+            return `<a href="/api/file/${type}/${id}" target="_blank" onclick="event.stopPropagation();">${displayNumber}</a>`;
+        }
+
+        function highlightText(text, searchTerm) {
+            if (!text || !searchTerm || !isSearchActive) return text;
+            const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
+            return text.replace(regex, '<span class="highlight">$1</span>');
+        }
+
+        function escapeRegex(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\$&');
+        }
+
+        function formatCurrency(value) {
+            if (value === null || value === undefined) return '-';
+            return new Intl.NumberFormat('ru-RU', {
+                style: 'currency',
+                currency: 'RUB'
+            }).format(value);
+        }
+
+        function populateSelect(selectId, items, valueKey, textKey, selectedValue = null) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = items.map(item =>
+                `<option value="${item[valueKey]}" ${item[valueKey] == selectedValue ? 'selected' : ''}>${item[textKey]}</option>`
+            ).join('');
+        }
+
+        // ==================== RECEIPT CRUD ====================
         async function editReceipt(id) {
             if (!currentUser) {
                 showMessage(false, 'Ошибка', 'Требуется авторизация');
                 return;
             }
 
-            const response = await fetch(`/api/receipt?id=${id}`);
-            const receipt = await response.json();
+            try {
+                const response = await fetch(`/api/receipt?id=${id}`);
+                const receipt = await response.json();
 
-            document.getElementById('receipt-id').value = receipt.id;
-            populateSelect('receipt-object-id', objectsCache, 'id', 'objectname', receipt.object_id);
-            document.getElementById('receipt-seller-object-name').value = receipt.seller_object_name || '';
-            document.getElementById('receipt-quantity').value = receipt.quantity;
-            populateSelect('receipt-seller-id', sellersCache, 'id', 'name', receipt.seller_id);
-            populateSelect('receipt-theme-id', themesCache, 'id', 'name', receipt.theme_id);
-            document.getElementById('receipt-location').value = receipt.location || '';
+                document.getElementById('receipt-id').value = receipt.id;
+                populateSelect('receipt-object-id', objectsCache, 'id', 'objectname', receipt.object_id);
+                document.getElementById('receipt-seller-object-name').value = receipt.seller_object_name || '';
+                document.getElementById('receipt-quantity').value = receipt.quantity;
+                populateSelect('receipt-seller-id', sellersCache, 'id', 'name', receipt.seller_id);
+                populateSelect('receipt-theme-id', themesCache, 'id', 'name', receipt.theme_id);
+                document.getElementById('receipt-location').value = receipt.location || '';
 
-            document.getElementById('edit-receipt-modal').classList.add('active');
+                document.getElementById('edit-receipt-modal').classList.add('active');
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
         }
 
         async function handleReceiptSubmit(e) {
@@ -767,21 +937,55 @@
             document.getElementById('edit-receipt-modal').classList.remove('active');
         }
 
+        function confirmDeleteReceipt(id) {
+            if (!currentUser) {
+                showMessage(false, 'Ошибка', 'Требуется авторизация');
+                return;
+            }
+
+            currentDeleteType = 'receipt';
+            currentDeleteId = id;
+            document.getElementById('delete-message').textContent = 'Вы уверены, что хотите удалить это поступление?';
+            document.getElementById('confirm-delete-btn').onclick = executeDelete;
+            document.getElementById('delete-modal').classList.add('active');
+        }
+
+        // ==================== WRITEOFF CRUD ====================
         async function editWriteoff(id) {
             if (!currentUser) {
                 showMessage(false, 'Ошибка', 'Требуется авторизация');
                 return;
             }
 
-            const response = await fetch(`/api/writeoff?id=${id}`);
-            const writeoff = await response.json();
+            try {
+                const response = await fetch(`/api/writeoff?id=${id}`);
+                const writeoff = await response.json();
 
-            document.getElementById('writeoff-id').value = writeoff.id;
-            populateSelect('writeoff-object-id', objectsCache, 'id', 'objectname', writeoff.object_id);
-            document.getElementById('writeoff-quantity').value = writeoff.quantity;
-            populateSelect('writeoff-theme-id', themesCache, 'id', 'name', writeoff.theme_id);
+                document.getElementById('writeoff-id').value = writeoff.id;
+                populateSelect('writeoff-object-id', objectsCache,
+                    'id', 'objectname', writeoff.object_id);
+                document.getElementById('writeoff-date').value =
+                    writeoff.writeoff_date || '';
+                document.getElementById('writeoff-quantity').value =
+                    writeoff.quantity;
+                populateSelect('writeoff-theme-id', themesCache,
+                    'id', 'name', writeoff.theme_id);
 
-            document.getElementById('edit-writeoff-modal').classList.add('active');
+                const docInfo =
+                    document.getElementById('writeoff-doc-info');
+                if (writeoff.document_filename) {
+                    docInfo.textContent =
+                        `Текущий документ: ${writeoff.document_filename}` +
+                        ` (оставьте пустым, чтобы не менять)`;
+                } else {
+                    docInfo.textContent = '';
+                }
+
+                document.getElementById('edit-writeoff-modal')
+                    .classList.add('active');
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
         }
 
         async function handleWriteoffSubmit(e) {
@@ -812,19 +1016,6 @@
             document.getElementById('edit-writeoff-modal').classList.remove('active');
         }
 
-        function confirmDeleteReceipt(id) {
-            if (!currentUser) {
-                showMessage(false, 'Ошибка', 'Требуется авторизация');
-                return;
-            }
-
-            currentDeleteType = 'receipt';
-            currentDeleteId = id;
-            document.getElementById('delete-message').textContent = 'Вы уверены, что хотите удалить это поступление?';
-            document.getElementById('confirm-delete-btn').onclick = executeDelete;
-            document.getElementById('delete-modal').classList.add('active');
-        }
-
         function confirmDeleteWriteoff(id) {
             if (!currentUser) {
                 showMessage(false, 'Ошибка', 'Требуется авторизация');
@@ -838,6 +1029,74 @@
             document.getElementById('delete-modal').classList.add('active');
         }
 
+        // ==================== PRICING CRUD ====================
+        function addPricing(receiptId) {
+            if (!currentUser) {
+                showMessage(false, 'Ошибка', 'Требуется авторизация');
+                return;
+            }
+
+            document.getElementById('pricing-modal-title').textContent = 'Добавить цену';
+            document.getElementById('pricing-id').value = '';
+            document.getElementById('pricing-receipt-id').value = receiptId;
+            document.getElementById('pricing-price').value = '';
+            document.getElementById('pricing-tax').value = '20';
+            document.getElementById('pricing-modal').classList.add('active');
+        }
+
+        async function editPricing(receiptId) {
+            if (!currentUser) {
+                showMessage(false, 'Ошибка', 'Требуется авторизация');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/pricing?receipt_id=${receiptId}`);
+                const pricing = await response.json();
+
+                if (pricing && pricing.id) {
+                    document.getElementById('pricing-modal-title').textContent = 'Редактировать цену';
+                    document.getElementById('pricing-id').value = pricing.id;
+                    document.getElementById('pricing-receipt-id').value = receiptId;
+                    document.getElementById('pricing-price').value = pricing.price;
+                    document.getElementById('pricing-tax').value = pricing.tax;
+                    document.getElementById('pricing-modal').classList.add('active');
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        async function handlePricingSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const isEdit = formData.get('id') !== '';
+
+            try {
+                const response = await fetch('/api/pricing', {
+                    method: isEdit ? 'PUT' : 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                closePricingModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    await refreshCurrentView();
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closePricingModal() {
+            document.getElementById('pricing-modal').classList.remove('active');
+        }
+
+        // ==================== DELETE ====================
         async function executeDelete() {
             try {
                 const response = await fetch(`/api/${currentDeleteType}?id=${currentDeleteId}`, {
@@ -862,6 +1121,7 @@
             document.getElementById('delete-modal').classList.remove('active');
         }
 
+        // ==================== MESSAGES ====================
         function showMessage(success, title, message) {
             document.getElementById('message-icon').textContent = success ? '✓' : '✗';
             document.getElementById('message-icon').className = 'modal-icon ' + (success ? 'success' : 'error');
@@ -873,22 +1133,6 @@
         function closeMessageModal() {
             document.getElementById('message-modal').classList.remove('active');
         }
-
-        document.querySelectorAll('.modal-overlay').forEach(overlay => {
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) {
-                    overlay.classList.remove('active');
-                }
-            });
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                document.querySelectorAll('.modal-overlay.active').forEach(modal => {
-                    modal.classList.remove('active');
-                });
-            }
-        });
     </script>
 </body>
 </html>
