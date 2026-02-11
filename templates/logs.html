@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Склад - Журнал действий</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header-row">
+            <h1>📋 Журнал действий</h1>
+            <a href="/" class="btn btn-secondary">← На главную</a>
+        </div>
+
+        <div class="search-panel">
+            <div class="search-row">
+                <input type="text" id="log-search" class="search-input"
+                       placeholder="Поиск по логам..."
+                       oninput="debounceSearch()">
+                <button class="btn btn-primary" onclick="loadLogs()">🔍 Поиск</button>
+                <button class="btn btn-secondary" onclick="resetLogSearch()">✖ Сброс</button>
+            </div>
+            <div id="log-info" class="search-info" style="display: none;"></div>
+        </div>
+
+        <div class="form-card">
+            <table class="manage-table" id="logs-table">
+                <thead>
+                    <tr>
+                        <th>Дата и время</th>
+                        <th>Пользователь</th>
+                        <th>Действие</th>
+                        <th>Тип</th>
+                        <th>ID</th>
+                        <th>Название</th>
+                        <th>Подробности</th>
+                    </tr>
+                </thead>
+                <tbody id="logs-body">
+                    <tr><td colspan="7" style="text-align: center;">Загрузка...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="pagination" id="pagination"></div>
+    </div>
+
+    <script>
+        let searchTimer = null;
+        let currentPage = 0;
+        const pageSize = 50;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            checkAdminAccess();
+            loadLogs();
+
+            document.getElementById('log-search')
+                .addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') loadLogs();
+            });
+        });
+
+        async function checkAdminAccess() {
+            try {
+                const response = await fetch('/api/auth/check');
+                const data = await response.json();
+                if (!data.authenticated || !data.user.admin) {
+                    window.location.href = '/';
+                }
+            } catch (error) {
+                window.location.href = '/';
+            }
+        }
+
+        function debounceSearch() {
+            clearTimeout(searchTimer);
+            searchTimer = setTimeout(() => loadLogs(), 500);
+        }
+
+        async function loadLogs() {
+            const search = document.getElementById('log-search')
+                .value.trim();
+            const offset = currentPage * pageSize;
+
+            let url = `/api/logs?limit=${pageSize}&offset=${offset}`;
+            if (search) {
+                url += `&search=${encodeURIComponent(search)}`;
+            }
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                renderLogs(data.logs);
+                renderPagination(data.total);
+
+                const info = document.getElementById('log-info');
+                info.style.display = 'block';
+                info.innerHTML =
+                    `Всего записей: <strong>${data.total}</strong>`;
+            } catch (error) {
+                document.getElementById('logs-body').innerHTML =
+                    `<tr><td colspan="7" style="text-align: center; color: #e74c3c;">
+                    Ошибка загрузки: ${error.message}</td></tr>`;
+            }
+        }
+
+        function renderLogs(logs) {
+            const tbody = document.getElementById('logs-body');
+
+            if (logs.length === 0) {
+                tbody.innerHTML =
+                    '<tr><td colspan="7" style="text-align: center;">' +
+                    'Нет записей</td></tr>';
+                return;
+            }
+
+            const actionColors = {
+                'Удаление': '#e74c3c',
+                'Редактирование': '#f39c12'
+            };
+
+            const entityIcons = {
+                'Объект': '📦',
+                'Поступление': '📥',
+                'Списание': '📤',
+                'Поставщик': '🏢',
+                'Тема': '🏷️',
+                'Цена': '💰',
+                'Пользователь': '👤'
+            };
+
+            tbody.innerHTML = logs.map(log => {
+                const date = new Date(log.log_date);
+                const dateStr = date.toLocaleString('ru-RU', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+
+                const actionColor =
+                    actionColors[log.action] || '#333';
+                const entityIcon =
+                    entityIcons[log.entity_type] || '📄';
+
+                return `
+                    <tr>
+                        <td class="log-date">${dateStr}</td>
+                        <td><strong>${log.username}</strong></td>
+                        <td>
+                            <span class="log-action"
+                                  style="color: ${actionColor};">
+                                ${log.action}
+                            </span>
+                        </td>
+                        <td>${entityIcon} ${log.entity_type}</td>
+                        <td>${log.entity_id || '-'}</td>
+                        <td>${log.entity_name || '-'}</td>
+                        <td class="log-details">
+                            ${log.details || '-'}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function renderPagination(total) {
+            const totalPages = Math.ceil(total / pageSize);
+            const pagination =
+                document.getElementById('pagination');
+
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            if (currentPage > 0) {
+                html += `<button class="btn btn-small btn-secondary"
+                    onclick="goToPage(${currentPage - 1})">
+                    ← Назад</button>`;
+            }
+
+            html += `<span class="page-info">
+                Страница ${currentPage + 1} из ${totalPages}
+                </span>`;
+
+            if (currentPage < totalPages - 1) {
+                html += `<button class="btn btn-small btn-secondary"
+                    onclick="goToPage(${currentPage + 1})">
+                    Вперёд →</button>`;
+            }
+
+            pagination.innerHTML = html;
+        }
+
+        function goToPage(page) {
+            currentPage = page;
+            loadLogs();
+            window.scrollTo(0, 0);
+        }
+
+        function resetLogSearch() {
+            document.getElementById('log-search').value = '';
+            currentPage = 0;
+            loadLogs();
+        }
+    </script>
+</body>
+</html>
