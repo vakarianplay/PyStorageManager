@@ -167,6 +167,8 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             '/users': ('templates/users.html', 'text/html'),
             '/users.html': ('templates/users.html', 'text/html'),
             '/static/style.css': ('static/style.css', 'text/css'),
+            '/logs': ('templates/logs.html', 'text/html'),
+            '/logs.html': ('templates/logs.html', 'text/html'),
         }
 
         try:
@@ -261,6 +263,23 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     self.send_json_response(result if result else {})
                 else:
                     self.send_json_response(self.handler.get_all_pricing())
+                    
+            elif path == '/api/logs':
+                if not self.require_admin():
+                    return
+                search = query.get('search', [''])[0]
+                limit = int(query.get('limit', [500])[0])
+                offset = int(query.get('offset', [0])[0])
+                if search:
+                    logs = self.handler.search_logs(
+                        search, limit, offset
+                    )
+                else:
+                    logs = self.handler.get_logs(limit, offset)
+                count = self.handler.get_logs_count()
+                self.send_json_response({
+                    'logs': logs, 'total': count
+                })
         except ValueError as e:
             self.send_error_json(str(e), 404)
         except Exception as e:
@@ -268,12 +287,9 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         path = urlparse(self.path).path
-
-        # Гарантированно читаем ВСЁ тело запроса
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length) if content_length > 0 else b''
 
-        # Парсим тело
         fields, files = MultipartParser.parse_body(
             self.headers, body
         )
@@ -342,55 +358,75 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
     def do_PUT(self):
         path = urlparse(self.path).path
 
-        content_length = int(self.headers.get('Content-Length', 0))
-        body = self.rfile.read(content_length) if content_length > 0 else b''
-
+        content_length = int(
+            self.headers.get('Content-Length', 0)
+        )
+        body = (
+            self.rfile.read(content_length)
+            if content_length > 0 else b''
+        )
         fields, files = MultipartParser.parse_body(
             self.headers, body
         )
+
+        session_id = self.get_session_id()
 
         try:
             if path == '/api/object':
                 if not self.require_auth():
                     return
                 self.send_json_response(
-                    self.handler.update_object(fields)
+                    self.handler.update_object(
+                        fields, session_id
+                    )
                 )
             elif path == '/api/seller':
                 if not self.require_auth():
                     return
                 self.send_json_response(
-                    self.handler.update_seller(fields)
+                    self.handler.update_seller(
+                        fields, session_id
+                    )
                 )
             elif path == '/api/theme':
                 if not self.require_auth():
                     return
                 self.send_json_response(
-                    self.handler.update_theme(fields)
+                    self.handler.update_theme(
+                        fields, session_id
+                    )
                 )
             elif path == '/api/receipt':
                 if not self.require_auth():
                     return
                 self.send_json_response(
-                    self.handler.update_receipt(fields)
+                    self.handler.update_receipt(
+                        fields, session_id
+                    )
                 )
             elif path == '/api/writeoff':
                 if not self.require_auth():
                     return
                 self.send_json_response(
-                    self.handler.update_writeoff(fields, files)
+                    self.handler.update_writeoff(
+                        fields, files, session_id
+                    )
                 )
             elif path == '/api/pricing':
                 if not self.require_auth():
                     return
                 self.send_json_response(
-                    self.handler.update_pricing(fields)
+                    self.handler.update_pricing(
+                        fields, session_id
+                    )
                 )
             elif path == '/api/user':
                 if not self.require_admin():
                     return
                 self.send_json_response(
-                    self.handler.update_user(fields)
+                    self.handler.update_user(
+                        fields, session_id
+                    )
                 )
             else:
                 self.send_error_json('Not Found', 404)
@@ -404,59 +440,79 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
         path = parsed.path
         query = parse_qs(parsed.query)
 
-        content_length = int(self.headers.get('Content-Length', 0))
+        content_length = int(
+            self.headers.get('Content-Length', 0)
+        )
         if content_length > 0:
             self.rfile.read(content_length)
+
+        session_id = self.get_session_id()
 
         try:
             if path == '/api/object':
                 if not self.require_auth():
                     return
-                object_id = query.get('id', [None])[0]
-                if object_id:
+                oid = query.get('id', [None])[0]
+                if oid:
                     self.send_json_response(
-                        self.handler.delete_object(int(object_id))
+                        self.handler.delete_object(
+                            int(oid), session_id
+                        )
                     )
                 else:
-                    self.send_error_json('Missing object id', 400)
+                    self.send_error_json(
+                        'Missing object id', 400
+                    )
             elif path == '/api/seller':
                 if not self.require_auth():
                     return
-                seller_id = query.get('id', [None])[0]
-                if seller_id:
+                sid = query.get('id', [None])[0]
+                if sid:
                     self.send_json_response(
-                        self.handler.delete_seller(int(seller_id))
+                        self.handler.delete_seller(
+                            int(sid), session_id
+                        )
                     )
                 else:
-                    self.send_error_json('Missing seller id', 400)
+                    self.send_error_json(
+                        'Missing seller id', 400
+                    )
             elif path == '/api/theme':
                 if not self.require_auth():
                     return
-                theme_id = query.get('id', [None])[0]
-                if theme_id:
+                tid = query.get('id', [None])[0]
+                if tid:
                     self.send_json_response(
-                        self.handler.delete_theme(int(theme_id))
+                        self.handler.delete_theme(
+                            int(tid), session_id
+                        )
                     )
                 else:
-                    self.send_error_json('Missing theme id', 400)
+                    self.send_error_json(
+                        'Missing theme id', 400
+                    )
             elif path == '/api/receipt':
                 if not self.require_auth():
                     return
-                receipt_id = query.get('id', [None])[0]
-                if receipt_id:
+                rid = query.get('id', [None])[0]
+                if rid:
                     self.send_json_response(
-                        self.handler.delete_receipt(int(receipt_id))
+                        self.handler.delete_receipt(
+                            int(rid), session_id
+                        )
                     )
                 else:
-                    self.send_error_json('Missing receipt id', 400)
+                    self.send_error_json(
+                        'Missing receipt id', 400
+                    )
             elif path == '/api/writeoff':
                 if not self.require_auth():
                     return
-                writeoff_id = query.get('id', [None])[0]
-                if writeoff_id:
+                wid = query.get('id', [None])[0]
+                if wid:
                     self.send_json_response(
                         self.handler.delete_writeoff(
-                            int(writeoff_id)
+                            int(wid), session_id
                         )
                     )
                 else:
@@ -466,11 +522,11 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             elif path == '/api/pricing':
                 if not self.require_auth():
                     return
-                pricing_id = query.get('id', [None])[0]
-                if pricing_id:
+                pid = query.get('id', [None])[0]
+                if pid:
                     self.send_json_response(
                         self.handler.delete_pricing(
-                            int(pricing_id)
+                            int(pid), session_id
                         )
                     )
                 else:
@@ -480,18 +536,21 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
             elif path == '/api/user':
                 if not self.require_admin():
                     return
-                user_id = query.get('id', [None])[0]
-                if user_id:
+                uid = query.get('id', [None])[0]
+                if uid:
                     self.send_json_response(
-                        self.handler.delete_user(int(user_id))
+                        self.handler.delete_user(
+                            int(uid), session_id
+                        )
                     )
                 else:
-                    self.send_error_json('Missing user id', 400)
+                    self.send_error_json(
+                        'Missing user id', 400
+                    )
             else:
                 self.send_error_json('Not Found', 404)
         except Exception as e:
             error_msg = str(e)
-            # Извлекаем понятное сообщение из ошибки PostgreSQL
             if 'CONTEXT' in error_msg:
                 error_msg = error_msg.split('\n')[0]
             self.send_error_json(error_msg, 400)

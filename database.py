@@ -206,3 +206,27 @@ class Database:
             'get_pricing_by_receipt', (receipt_id,), fetch=True
         )
         return result[0] if result else None
+    
+    # Logging methods
+    def add_log(self, user_id, username, action,
+                entity_type, entity_id, entity_name,
+                details=None):
+        return self.call_function_scalar(
+            'add_log',
+            (user_id, username, action,
+             entity_type, entity_id, entity_name, details)
+        )
+
+    def get_all_logs(self, limit=500, offset=0):
+        return self.call_function(
+            'get_all_logs', (limit, offset), fetch=True
+        )
+
+    def get_logs_count(self):
+        return self.call_function_scalar('get_logs_count')
+
+    def search_logs(self, search_text, limit=500, offset=0):
+        return self.call_function(
+            'search_logs', (search_text, limit, offset),
+            fetch=True
+        )

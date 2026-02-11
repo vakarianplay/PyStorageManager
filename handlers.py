@@ -4,22 +4,49 @@ from urllib.parse import quote
 from auth import SessionManager
 
 class RequestHandler:
-    def __init__(self, db, manager, user_manager, session_manager, pricing_manager=None):
+    def __init__(self, db, manager, user_manager,
+                 session_manager, pricing_manager=None):
         self.db = db
         self.manager = manager
         self.user_manager = user_manager
         self.session_manager = session_manager
         self.pricing_manager = pricing_manager
 
-    # Auth handlers
+    # ==================== LOGGING ====================
+    def _log(self, session_id, action, entity_type,
+             entity_id, entity_name, details=None):
+        """Записывает действие в лог."""
+        user = self.session_manager.get_session(session_id)
+        if user:
+            self.db.add_log(
+                user['id'], user['username'], action,
+                entity_type, entity_id, entity_name, details
+            )
+
+    def get_logs(self, limit=500, offset=0):
+        logs = self.db.get_all_logs(limit, offset)
+        return [dict(l) for l in logs]
+
+    def get_logs_count(self):
+        return self.db.get_logs_count()
+
+    def search_logs(self, search_text, limit=500, offset=0):
+        logs = self.db.search_logs(search_text, limit, offset)
+        return [dict(l) for l in logs]
+
+    # ==================== AUTH ====================
     def login(self, username, password):
         password_hash = SessionManager.hash_password(password)
         user = self.db.authenticate_user(username, password_hash)
 
         if not user:
-            raise ValueError('Неверное имя пользователя или пароль')
+            raise ValueError(
+                'Неверное имя пользователя или пароль'
+            )
 
-        session_id = self.session_manager.create_session(dict(user))
+        session_id = self.session_manager.create_session(
+            dict(user)
+        )
         return {
             'success': True,
             'session_id': session_id,
@@ -40,7 +67,7 @@ class RequestHandler:
             return {'authenticated': True, 'user': user}
         return {'authenticated': False}
 
-    # User management (admin only)
+    # ==================== USER MANAGEMENT ====================
     def get_users(self):
         users = self.db.get_all_users()
         return [dict(u) for u in users]
@@ -60,14 +87,16 @@ class RequestHandler:
             raise ValueError('Заполните все поля')
 
         password_hash = SessionManager.hash_password(password)
-        result = self.user_manager.create_user(username, password_hash, admin)
+        result = self.user_manager.create_user(
+            username, password_hash, admin
+        )
         return {
             'success': True,
             'id': result['id'],
             'message': f'Пользователь "{username}" успешно создан'
         }
 
-    def update_user(self, fields):
+    def update_user(self, fields, session_id=None):
         user_id = int(fields.get('id'))
         username = fields.get('username')
         admin = fields.get('admin', '').lower() == 'true'
@@ -77,21 +106,39 @@ class RequestHandler:
         password = fields.get('password', '').strip()
         if password:
             password_hash = SessionManager.hash_password(password)
-            self.user_manager.update_user_password(user_id, password_hash)
+            self.user_manager.update_user_password(
+                user_id, password_hash
+            )
+
+        if session_id:
+            self._log(
+                session_id, 'Редактирование', 'Пользователь',
+                user_id, username, None
+            )
 
         return {
             'success': True,
             'message': f'Пользователь "{username}" успешно обновлён'
         }
 
-    def delete_user(self, user_id):
+    def delete_user(self, user_id, session_id=None):
+        user = self.db.get_user_by_id(user_id)
+        user_name = user['username'] if user else str(user_id)
+
         self.user_manager.delete_user(user_id)
+
+        if session_id:
+            self._log(
+                session_id, 'Удаление', 'Пользователь',
+                user_id, user_name, None
+            )
+
         return {
             'success': True,
             'message': 'Пользователь успешно удалён'
         }
 
-    # GET handlers
+    # ==================== GET HANDLERS ====================
     def get_objects(self):
         self.db.update_storage_stats()
         objects = self.db.get_all_objects()
@@ -148,26 +195,32 @@ class RequestHandler:
             raise ValueError('File not found')
         return result
 
-    # Search handler
+    # ==================== SEARCH ====================
     def search_objects(self, search_type, search_value):
         self.db.update_storage_stats()
 
         if search_type == 'name':
             objects = self.db.search_objects_by_name(search_value)
         elif search_type == 'seller_name':
-            objects = self.db.search_objects_by_seller_name(search_value)
+            objects = self.db.search_objects_by_seller_name(
+                search_value
+            )
         elif search_type == 'theme':
-            objects = self.db.search_objects_by_theme(int(search_value))
+            objects = self.db.search_objects_by_theme(
+                int(search_value)
+            )
         elif search_type == 'bill':
             objects = self.db.search_objects_by_bill(search_value)
         elif search_type == 'invoice':
-            objects = self.db.search_objects_by_invoice(search_value)
+            objects = self.db.search_objects_by_invoice(
+                search_value
+            )
         else:
             objects = self.db.get_all_objects()
 
         return [dict(obj) for obj in objects]
 
-    # CREATE handlers
+    # ==================== CREATE ====================
     def create_object(self, fields):
         object_name = fields.get('objectName')
         if not object_name:
@@ -215,12 +268,16 @@ class RequestHandler:
 
         theme_id = fields.get('themeId')
         if fields.get('newThemeName'):
-            result = self.manager.create_theme(fields['newThemeName'])
+            result = self.manager.create_theme(
+                fields['newThemeName']
+            )
             theme_id = result['id']
 
         object_id = fields.get('objectId')
         if fields.get('newObjectName'):
-            result = self.manager.create_object(fields['newObjectName'])
+            result = self.manager.create_object(
+                fields['newObjectName']
+            )
             object_id = result['id']
 
         bill_file_info = files.get('billFile', {})
@@ -237,30 +294,26 @@ class RequestHandler:
         invoice_result = self.manager.create_invoice(
             fields.get('invoiceNumber', ''),
             fields.get('invoiceDate'),
-            seller_id,
-            bill_id,
+            seller_id, bill_id,
             invoice_file_info.get('data'),
             invoice_file_info.get('filename')
         )
         invoice_id = invoice_result['id']
 
-        entry_control_file_info = files.get('entryControlFile', {})
-        entry_control_result = self.manager.create_entry_control(
+        ec_file_info = files.get('entryControlFile', {})
+        ec_result = self.manager.create_entry_control(
             fields.get('entryControlNumber', ''),
             fields.get('entryControlDate'),
-            entry_control_file_info.get('data'),
-            entry_control_file_info.get('filename')
+            ec_file_info.get('data'),
+            ec_file_info.get('filename')
         )
-        entry_control_id = entry_control_result['id']
+        entry_control_id = ec_result['id']
 
         receipt_result = self.manager.create_receipt(
             object_id,
             fields.get('sellerObjectName', ''),
-            seller_id,
-            bill_id,
-            theme_id,
-            invoice_id,
-            entry_control_id,
+            seller_id, bill_id, theme_id,
+            invoice_id, entry_control_id,
             fields.get('location', ''),
             int(fields.get('quantity', 0))
         )
@@ -268,10 +321,12 @@ class RequestHandler:
         return {
             'success': True,
             'id': receipt_result['id'],
-            'message': f'Поступление успешно зарегистрировано!\n\n'
-                       f'Количество: {fields.get("quantity", 0)} шт.\n'
-                       f'Счёт: {fields.get("billNumber", "-")}\n'
-                       f'Накладная: {fields.get("invoiceNumber", "-")}'
+            'message': (
+                f'Поступление успешно зарегистрировано!\n\n'
+                f'Количество: {fields.get("quantity", 0)} шт.\n'
+                f'Счёт: {fields.get("billNumber", "-")}\n'
+                f'Накладная: {fields.get("invoiceNumber", "-")}'
+            )
         }
 
     def create_writeoff(self, fields, files=None):
@@ -282,7 +337,9 @@ class RequestHandler:
         theme_id = fields.get('themeId')
 
         if fields.get('newThemeName'):
-            result = self.manager.create_theme(fields['newThemeName'])
+            result = self.manager.create_theme(
+                fields['newThemeName']
+            )
             theme_id = result['id']
 
         quantity = int(fields.get('quantity', 0))
@@ -292,7 +349,6 @@ class RequestHandler:
         file_data = doc_info.get('data')
         filename = doc_info.get('filename')
 
-        # Если файл пустой (не выбран), обнуляем
         if file_data is not None and len(file_data) == 0:
             file_data = None
             filename = None
@@ -304,41 +360,65 @@ class RequestHandler:
         return {
             'success': True,
             'id': result['id'],
-            'message': f'Списание успешно зарегистрировано!\n\n'
-                    f'Количество: {quantity} шт.'
+            'message': (
+                f'Списание успешно зарегистрировано!\n\n'
+                f'Количество: {quantity} шт.'
+            )
         }
 
-    # UPDATE handlers
-    def update_object(self, fields):
+    # ==================== UPDATE (с логированием) ===========
+    def update_object(self, fields, session_id=None):
         object_id = int(fields.get('id'))
         object_name = fields.get('objectName')
         self.manager.update_object(object_id, object_name)
+
+        if session_id:
+            self._log(
+                session_id, 'Редактирование', 'Объект',
+                object_id, object_name, None
+            )
+
         return {
             'success': True,
             'message': f'Объект "{object_name}" успешно обновлён'
         }
 
-    def update_seller(self, fields):
+    def update_seller(self, fields, session_id=None):
         seller_id = int(fields.get('id'))
         name = fields.get('name')
         inn = fields.get('inn')
         kpp = fields.get('kpp')
         self.manager.update_seller(seller_id, name, inn, kpp)
+
+        if session_id:
+            self._log(
+                session_id, 'Редактирование', 'Поставщик',
+                seller_id, name,
+                f'ИНН: {inn}, КПП: {kpp}'
+            )
+
         return {
             'success': True,
             'message': f'Поставщик "{name}" успешно обновлён'
         }
 
-    def update_theme(self, fields):
+    def update_theme(self, fields, session_id=None):
         theme_id = int(fields.get('id'))
         name = fields.get('name')
         self.manager.update_theme(theme_id, name)
+
+        if session_id:
+            self._log(
+                session_id, 'Редактирование', 'Тема',
+                theme_id, name, None
+            )
+
         return {
             'success': True,
             'message': f'Тема "{name}" успешно обновлена'
         }
 
-    def update_receipt(self, fields):
+    def update_receipt(self, fields, session_id=None):
         receipt_id = int(fields.get('id'))
         object_id = int(fields.get('objectId'))
         seller_object_name = fields.get('sellerObjectName')
@@ -347,16 +427,45 @@ class RequestHandler:
         location = fields.get('location')
         quantity = int(fields.get('quantity'))
 
+        # Получаем имя объекта для лога
+        obj = self.db.get_object_by_id(object_id)
+        obj_name = obj['objectname'] if obj else str(object_id)
+
         self.manager.update_receipt(
             receipt_id, object_id, seller_object_name,
             seller_id, theme_id, location, quantity
         )
+
+        if session_id:
+            # Получаем данные о документах
+            receipt = self.db.get_receipt_by_id(receipt_id)
+            details_parts = [
+                f'Наименование: {seller_object_name}',
+                f'Кол-во: {quantity}'
+            ]
+            if receipt:
+                if receipt.get('bill_number'):
+                    details_parts.append(
+                        f'Счёт: {receipt["bill_number"]}'
+                    )
+                if receipt.get('invoice_number'):
+                    details_parts.append(
+                        f'Накладная: {receipt["invoice_number"]}'
+                    )
+
+            self._log(
+                session_id, 'Редактирование', 'Поступление',
+                receipt_id, obj_name,
+                ', '.join(details_parts)
+            )
+
         return {
             'success': True,
             'message': 'Поступление успешно обновлено'
         }
 
-    def update_writeoff(self, fields, files=None):
+    def update_writeoff(self, fields, files=None,
+                        session_id=None):
         if files is None:
             files = {}
 
@@ -370,52 +479,382 @@ class RequestHandler:
         file_data = doc_info.get('data')
         filename = doc_info.get('filename')
 
+        # Получаем имя объекта для лога
+        obj = self.db.get_object_by_id(object_id)
+        obj_name = obj['objectname'] if obj else str(object_id)
+
+        # Получаем данные списания до обновления
+        old_writeoff = self.db.get_writeoff_by_id(writeoff_id)
+
         self.manager.update_writeoff(
             writeoff_id, object_id, theme_id, quantity,
             writeoff_date, file_data, filename
         )
+
+        if session_id:
+            details_parts = [f'Кол-во: {quantity}']
+            if writeoff_date:
+                details_parts.append(f'Дата: {writeoff_date}')
+            if filename:
+                details_parts.append(f'Документ: {filename}')
+            elif old_writeoff and old_writeoff.get('document_filename'):
+                details_parts.append(
+                    f'Документ: {old_writeoff["document_filename"]}'
+                )
+
+            self._log(
+                session_id, 'Редактирование', 'Списание',
+                writeoff_id, obj_name,
+                ', '.join(details_parts)
+            )
+
         return {
             'success': True,
             'message': 'Списание успешно обновлено'
         }
 
-    # DELETE handlers
-    def delete_object(self, object_id):
+    def update_object(self, fields, session_id=None):
+        object_id = int(fields.get('id'))
+
+        # Получаем старое имя для лога
+        old_obj = self.db.get_object_by_id(object_id)
+        old_name = old_obj['objectname'] if old_obj else ''
+
+        object_name = fields.get('objectName')
+        self.manager.update_object(object_id, object_name)
+
+        if session_id:
+            details = None
+            if old_name and old_name != object_name:
+                details = f'Было: {old_name}'
+            self._log(
+                session_id, 'Редактирование', 'Объект',
+                object_id, object_name, details
+            )
+
+        return {
+            'success': True,
+            'message': f'Объект "{object_name}" успешно обновлён'
+        }
+
+    def update_pricing(self, fields, session_id=None):
+        pricing_id = int(fields.get('id'))
+        price = float(fields.get('price'))
+        tax = float(fields.get('tax'))
+
+        # Получаем данные о поступлении и объекте
+        pricing = self.db.get_pricing_by_id(pricing_id)
+        obj_name = f'Цена #{pricing_id}'
+        if pricing:
+            receipt = self.db.get_receipt_by_id(
+                pricing['receipt_id']
+            )
+            if receipt:
+                obj = self.db.get_object_by_id(
+                    receipt['object_id']
+                )
+                if obj:
+                    obj_name = obj['objectname']
+
+        self.pricing_manager.update_pricing(
+            pricing_id, price, tax
+        )
+
+        if session_id:
+            self._log(
+                session_id, 'Редактирование', 'Цена',
+                pricing_id, obj_name,
+                f'Цена: {price}, НДС: {tax}%'
+            )
+
+        return {
+            'success': True,
+            'message': 'Цена успешно обновлена'
+        }
+
+    # ==================== DELETE (с логированием) ============
+    def delete_object(self, object_id, session_id=None):
+        obj = self.db.get_object_by_id(object_id)
+        obj_name = obj['objectname'] if obj else str(object_id)
+
+        # Считаем связанные записи для лога
+        receipts = self.db.get_receipts_by_object(object_id)
+        writeoffs = self.db.get_writeoffs_by_object(object_id)
+
         self.manager.delete_object(object_id)
+
+        if session_id:
+            details = (
+                f'Удалено поступлений: {len(receipts)}, '
+                f'списаний: {len(writeoffs)}'
+            )
+            self._log(
+                session_id, 'Удаление', 'Объект',
+                object_id, obj_name, details
+            )
+
         return {
             'success': True,
             'message': 'Объект успешно удалён'
         }
 
-    def delete_seller(self, seller_id):
-        self.manager.delete_seller(seller_id)
-        return {
-            'success': True,
-            'message': 'Поставщик успешно удалён'
-        }
+    def delete_receipt(self, receipt_id, session_id=None):
+        receipt = self.db.get_receipt_by_id(receipt_id)
 
-    def delete_theme(self, theme_id):
-        self.manager.delete_theme(theme_id)
-        return {
-            'success': True,
-            'message': 'Тема успешно удалена'
-        }
+        obj_name = str(receipt_id)
+        details_parts = []
 
-    def delete_receipt(self, receipt_id):
+        if receipt:
+            obj = self.db.get_object_by_id(receipt.get('object_id'))
+            if obj:
+                obj_name = obj['objectname']
+
+            if receipt.get('seller_object_name'):
+                details_parts.append(
+                    f'Наименование: {receipt["seller_object_name"]}'
+                )
+            if receipt.get('bill_number'):
+                details_parts.append(
+                    f'Счёт: {receipt["bill_number"]}'
+                )
+            if receipt.get('invoice_number'):
+                details_parts.append(
+                    f'Накладная: {receipt["invoice_number"]}'
+                )
+            if receipt.get('quantity'):
+                details_parts.append(
+                    f'Кол-во: {receipt["quantity"]}'
+                )
+
         self.manager.delete_receipt(receipt_id)
+
+        if session_id:
+            self._log(
+                session_id, 'Удаление', 'Поступление',
+                receipt_id, obj_name,
+                ', '.join(details_parts) if details_parts else None
+            )
+
         return {
             'success': True,
             'message': 'Поступление успешно удалено'
         }
 
-    def delete_writeoff(self, writeoff_id):
+    def delete_writeoff(self, writeoff_id, session_id=None):
+        writeoff = self.db.get_writeoff_by_id(writeoff_id)
+
+        obj_name = str(writeoff_id)
+        details_parts = []
+
+        if writeoff:
+            obj_name = (
+                writeoff.get('object_name') or str(writeoff_id)
+            )
+            if writeoff.get('writeoff_date'):
+                details_parts.append(
+                    f'Дата: {writeoff["writeoff_date"]}'
+                )
+            if writeoff.get('document_filename'):
+                details_parts.append(
+                    f'Документ: {writeoff["document_filename"]}'
+                )
+            if writeoff.get('quantity'):
+                details_parts.append(
+                    f'Кол-во: {writeoff["quantity"]}'
+                )
+            if writeoff.get('theme_name'):
+                details_parts.append(
+                    f'Тема: {writeoff["theme_name"]}'
+                )
+
         self.manager.delete_writeoff(writeoff_id)
+
+        if session_id:
+            self._log(
+                session_id, 'Удаление', 'Списание',
+                writeoff_id, obj_name,
+                ', '.join(details_parts) if details_parts else None
+            )
+
         return {
             'success': True,
             'message': 'Списание успешно удалено'
         }
-        
-    # Pricing handlers
+
+    def delete_pricing(self, pricing_id, session_id=None):
+        pricing = self.db.get_pricing_by_id(pricing_id)
+
+        obj_name = f'Цена #{pricing_id}'
+        details = None
+
+        if pricing:
+            receipt = self.db.get_receipt_by_id(
+                pricing['receipt_id']
+            )
+            if receipt:
+                obj = self.db.get_object_by_id(
+                    receipt['object_id']
+                )
+                if obj:
+                    obj_name = obj['objectname']
+            details = (
+                f'Цена: {pricing["price"]}, '
+                f'НДС: {pricing["tax"]}%'
+            )
+
+        self.pricing_manager.delete_pricing(pricing_id)
+
+        if session_id:
+            self._log(
+                session_id, 'Удаление', 'Цена',
+                pricing_id, obj_name, details
+            )
+
+        return {
+            'success': True,
+            'message': 'Цена успешно удалена'
+        }
+
+    def delete_seller(self, seller_id, session_id=None):
+        seller = self.db.get_seller_by_id(seller_id)
+        seller_name = seller['name'] if seller else str(seller_id)
+
+        details = None
+        if seller:
+            details = f'ИНН: {seller["inn"]}, КПП: {seller["kpp"]}'
+
+        self.manager.delete_seller(seller_id)
+
+        if session_id:
+            self._log(
+                session_id, 'Удаление', 'Поставщик',
+                seller_id, seller_name, details
+            )
+
+        return {
+            'success': True,
+            'message': 'Поставщик успешно удалён'
+        }
+
+    def delete_theme(self, theme_id, session_id=None):
+        theme = self.db.get_theme_by_id(theme_id)
+        theme_name = theme['name'] if theme else str(theme_id)
+
+        self.manager.delete_theme(theme_id)
+
+        if session_id:
+            self._log(
+                session_id, 'Удаление', 'Тема',
+                theme_id, theme_name, None
+            )
+
+        return {
+            'success': True,
+            'message': 'Тема успешно удалена'
+        }
+
+    def update_seller(self, fields, session_id=None):
+        seller_id = int(fields.get('id'))
+        name = fields.get('name')
+        inn = fields.get('inn')
+        kpp = fields.get('kpp')
+
+        old_seller = self.db.get_seller_by_id(seller_id)
+
+        self.manager.update_seller(seller_id, name, inn, kpp)
+
+        if session_id:
+            details = f'ИНН: {inn}, КПП: {kpp}'
+            if old_seller and old_seller['name'] != name:
+                details = f'Было: {old_seller["name"]}, {details}'
+            self._log(
+                session_id, 'Редактирование', 'Поставщик',
+                seller_id, name, details
+            )
+
+        return {
+            'success': True,
+            'message': f'Поставщик "{name}" успешно обновлён'
+        }
+
+    def update_theme(self, fields, session_id=None):
+        theme_id = int(fields.get('id'))
+        name = fields.get('name')
+
+        old_theme = self.db.get_theme_by_id(theme_id)
+
+        self.manager.update_theme(theme_id, name)
+
+        if session_id:
+            details = None
+            if old_theme and old_theme['name'] != name:
+                details = f'Было: {old_theme["name"]}'
+            self._log(
+                session_id, 'Редактирование', 'Тема',
+                theme_id, name, details
+            )
+
+        return {
+            'success': True,
+            'message': f'Тема "{name}" успешно обновлена'
+        }
+
+    def update_user(self, fields, session_id=None):
+        user_id = int(fields.get('id'))
+        username = fields.get('username')
+        admin = fields.get('admin', '').lower() == 'true'
+
+        old_user = self.db.get_user_by_id(user_id)
+
+        self.user_manager.update_user(user_id, username, admin)
+
+        password = fields.get('password', '').strip()
+        if password:
+            password_hash = SessionManager.hash_password(password)
+            self.user_manager.update_user_password(
+                user_id, password_hash
+            )
+
+        if session_id:
+            details_parts = []
+            if old_user and old_user['username'] != username:
+                details_parts.append(
+                    f'Было: {old_user["username"]}'
+                )
+            role = 'Администратор' if admin else 'Пользователь'
+            details_parts.append(f'Роль: {role}')
+            if password:
+                details_parts.append('Пароль изменён')
+
+            self._log(
+                session_id, 'Редактирование', 'Пользователь',
+                user_id, username,
+                ', '.join(details_parts)
+            )
+
+        return {
+            'success': True,
+            'message': f'Пользователь "{username}" успешно обновлён'
+        }
+
+    def delete_user(self, user_id, session_id=None):
+        user = self.db.get_user_by_id(user_id)
+        user_name = user['username'] if user else str(user_id)
+
+        self.user_manager.delete_user(user_id)
+
+        if session_id:
+            self._log(
+                session_id, 'Удаление', 'Пользователь',
+                user_id, user_name, None
+            )
+
+        return {
+            'success': True,
+            'message': 'Пользователь успешно удалён'
+        }
+
+    # ==================== PRICING GET ====================
     def get_all_pricing(self):
         pricing = self.db.get_all_pricing()
         return [dict(p) for p in pricing]
@@ -439,33 +878,18 @@ class RequestHandler:
 
         existing = self.db.get_pricing_by_receipt(receipt_id)
         if existing:
-            raise ValueError('Цена для этого поступления уже существует')
+            raise ValueError(
+                'Цена для этого поступления уже существует'
+            )
 
-        result = self.pricing_manager.create_pricing(receipt_id, price, tax)
+        result = self.pricing_manager.create_pricing(
+            receipt_id, price, tax
+        )
         return {
             'success': True,
             'id': result['id'],
             'message': 'Цена успешно добавлена'
         }
-
-    def update_pricing(self, fields):
-        pricing_id = int(fields.get('id'))
-        price = float(fields.get('price'))
-        tax = float(fields.get('tax'))
-
-        self.pricing_manager.update_pricing(pricing_id, price, tax)
-        return {
-            'success': True,
-            'message': 'Цена успешно обновлена'
-        }
-
-    def delete_pricing(self, pricing_id):
-        self.pricing_manager.delete_pricing(pricing_id)
-        return {
-            'success': True,
-            'message': 'Цена успешно удалена'
-        }
-
 class MultipartParser:
     @staticmethod
     def parse(headers, rfile):
