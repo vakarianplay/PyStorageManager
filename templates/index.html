@@ -742,10 +742,10 @@
         }
 
         function renderWriteoffs(writeoffs, searchInfo) {
-            let html = '<div class="section"><h3>📤 Списания</h3>';
+            let html = '<div class="section"><h3>📤 Отправлено на производство</h3>';
 
             if (writeoffs.length === 0) {
-                return html + '<p class="no-data">Нет списаний</p></div>';
+                return html + '<p class="no-data">Нет отправленных на производство</p></div>';
             }
 
             const showActions = currentUser !== null;

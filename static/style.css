@@ -1245,3 +1245,43 @@ h1 {
         flex-direction: column;
     }
 }
+
+/* =====================
+   LOG STYLES
+   ===================== */
+
+.log-date {
+    white-space: nowrap;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 13px;
+    color: #666;
+}
+
+.log-action {
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 12px;
+}
+
+.log-details {
+    font-size: 13px;
+    color: #666;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-top: 20px;
+    padding: 15px;
+}
+
+.page-info {
+    font-size: 14px;
+    color: #666;
+}
