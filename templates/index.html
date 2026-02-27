@@ -71,39 +71,104 @@
 
     <!-- Модальное окно редактирования поступления -->
     <div id="edit-receipt-modal" class="modal-overlay">
-        <div class="modal modal-edit">
-            <h3>Редактирование поступления</h3>
-            <form id="edit-receipt-form">
-                <input type="hidden" id="receipt-id" name="id">
+        <div class="modal modal-edit modal-wide">
+            <div class="modal-header-sticky">
+                <h3>Редактирование поступления</h3>
+            </div>
+            <div class="modal-body-scroll">
+                <input type="hidden" id="receipt-id">
                 <div class="form-group">
                     <label>Объект</label>
-                    <select id="receipt-object-id" name="objectId" required></select>
+                    <select id="receipt-object-id"></select>
                 </div>
                 <div class="form-group">
-                    <label>Наименование по накладной</label>
-                    <input type="text" id="receipt-seller-object-name" name="sellerObjectName" required>
+                    <label>Наименование у поставщика</label>
+                    <input type="text" id="receipt-seller-object-name">
                 </div>
                 <div class="form-group">
                     <label>Количество</label>
-                    <input type="number" id="receipt-quantity" name="quantity" min="1" required>
+                    <input type="number" id="receipt-quantity" min="1">
                 </div>
                 <div class="form-group">
                     <label>Поставщик</label>
-                    <select id="receipt-seller-id" name="sellerId" required></select>
+                    <select id="receipt-seller-id"></select>
                 </div>
                 <div class="form-group">
                     <label>Тема</label>
-                    <select id="receipt-theme-id" name="themeId" required></select>
+                    <select id="receipt-theme-id"></select>
                 </div>
                 <div class="form-group">
                     <label>Место хранения</label>
-                    <input type="text" id="receipt-location" name="location">
+                    <input type="text" id="receipt-location">
                 </div>
-                <div class="modal-buttons">
-                    <button type="submit" class="btn btn-primary">Сохранить</button>
-                    <button type="button" class="btn btn-secondary" onclick="closeReceiptModal()">Отмена</button>
+
+                <div class="documents-section">
+                    <h4>📎 Счёт</h4>
+                    <div class="doc-row">
+                        <div class="form-group flex-1">
+                            <label>Номер</label>
+                            <input type="text" id="receipt-bill-number"
+                                placeholder="Номер счёта">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>Дата</label>
+                            <input type="date" id="receipt-bill-date">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="doc-current" id="receipt-bill-current"></div>
+                        <input type="file" id="edit-bill-file"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                        <small class="doc-hint">Оставьте пустым, чтобы не менять файл</small>
+                    </div>
                 </div>
-            </form>
+
+                <div class="documents-section">
+                    <h4>📎 Накладная</h4>
+                    <div class="doc-row">
+                        <div class="form-group flex-1">
+                            <label>Номер</label>
+                            <input type="text" id="receipt-invoice-number"
+                                placeholder="Номер накладной">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>Дата</label>
+                            <input type="date" id="receipt-invoice-date">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="doc-current" id="receipt-invoice-current"></div>
+                        <input type="file" id="edit-invoice-file"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                        <small class="doc-hint">Оставьте пустым, чтобы не менять файл</small>
+                    </div>
+                </div>
+
+                <div class="documents-section">
+                    <h4>📎 Входной контроль</h4>
+                    <div class="doc-row">
+                        <div class="form-group flex-1">
+                            <label>Номер</label>
+                            <input type="text" id="receipt-ec-number"
+                                placeholder="Номер вх. контроля">
+                        </div>
+                        <div class="form-group flex-1">
+                            <label>Дата</label>
+                            <input type="date" id="receipt-ec-date">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="doc-current" id="receipt-ec-current"></div>
+                        <input type="file" id="edit-ec-file"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                        <small class="doc-hint">Оставьте пустым, чтобы не менять файл</small>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer-sticky">
+                <button type="button" class="btn btn-primary" onclick="submitEditReceipt()">Сохранить</button>
+                <button type="button" class="btn btn-secondary" onclick="closeReceiptModal()">Отмена</button>
+            </div>
         </div>
     </div>
 
@@ -224,7 +289,6 @@
             loadObjects();
             loadSelectorsData();
 
-            document.getElementById('edit-receipt-form').addEventListener('submit', handleReceiptSubmit);
             document.getElementById('edit-writeoff-form').addEventListener('submit', handleWriteoffSubmit);
             document.getElementById('login-form').addEventListener('submit', handleLogin);
             document.getElementById('pricing-form').addEventListener('submit', handlePricingSubmit);
@@ -894,20 +958,155 @@
 
             try {
                 const response = await fetch(`/api/receipt?id=${id}`);
-                const receipt = await response.json();
+                const r = await response.json();
 
-                document.getElementById('receipt-id').value = receipt.id;
-                populateSelect('receipt-object-id', objectsCache, 'id', 'objectname', receipt.object_id);
-                document.getElementById('receipt-seller-object-name').value = receipt.seller_object_name || '';
-                document.getElementById('receipt-quantity').value = receipt.quantity;
-                populateSelect('receipt-seller-id', sellersCache, 'id', 'name', receipt.seller_id);
-                populateSelect('receipt-theme-id', themesCache, 'id', 'name', receipt.theme_id);
-                document.getElementById('receipt-location').value = receipt.location || '';
+                document.getElementById('receipt-id').value = r.id;
+                populateSelect('receipt-object-id', objectsCache,
+                    'id', 'objectname', r.object_id);
+                document.getElementById('receipt-seller-object-name').value =
+                    r.seller_object_name || '';
+                document.getElementById('receipt-quantity').value =
+                    r.quantity;
+                populateSelect('receipt-seller-id', sellersCache,
+                    'id', 'name', r.seller_id);
+                populateSelect('receipt-theme-id', themesCache,
+                    'id', 'name', r.theme_id);
+                document.getElementById('receipt-location').value =
+                    r.location || '';
 
-                document.getElementById('edit-receipt-modal').classList.add('active');
+                // Счёт — номер и дата
+                document.getElementById('receipt-bill-number').value =
+                    r.bill_number || '';
+                document.getElementById('receipt-bill-date').value =
+                    r.bill_date || '';
+                const billCurrent =
+                    document.getElementById('receipt-bill-current');
+                if (r.bill_id) {
+                    billCurrent.innerHTML =
+                        'Текущий файл: <a href="/api/file/bill/' +
+                        r.bill_id + '" target="_blank">' +
+                        (r.bill_number || 'открыть') + '</a>';
+                } else {
+                    billCurrent.innerHTML =
+                        '<span style="color:#999;">Нет файла</span>';
+                }
+
+                // Накладная — номер и дата
+                document.getElementById('receipt-invoice-number').value =
+                    r.invoice_number || '';
+                document.getElementById('receipt-invoice-date').value =
+                    r.invoice_date || '';
+                const invCurrent =
+                    document.getElementById('receipt-invoice-current');
+                if (r.invoice_id) {
+                    invCurrent.innerHTML =
+                        'Текущий файл: <a href="/api/file/invoice/' +
+                        r.invoice_id + '" target="_blank">' +
+                        (r.invoice_number || 'открыть') + '</a>';
+                } else {
+                    invCurrent.innerHTML =
+                        '<span style="color:#999;">Нет файла</span>';
+                }
+
+                // Вх. контроль — номер и дата
+                document.getElementById('receipt-ec-number').value =
+                    r.entry_control_number || '';
+                document.getElementById('receipt-ec-date').value =
+                    r.entry_control_date || '';
+                const ecCurrent =
+                    document.getElementById('receipt-ec-current');
+                if (r.entry_control_id) {
+                    ecCurrent.innerHTML =
+                        'Текущий файл: <a href="/api/file/entry_control/' +
+                        r.entry_control_id + '" target="_blank">' +
+                        (r.entry_control_number || 'открыть') + '</a>';
+                } else {
+                    ecCurrent.innerHTML =
+                        '<span style="color:#999;">Нет файла</span>';
+                }
+
+                // Очищаем file inputs
+                document.getElementById('edit-bill-file').value = '';
+                document.getElementById('edit-invoice-file').value = '';
+                document.getElementById('edit-ec-file').value = '';
+
+                document.getElementById('edit-receipt-modal')
+                    .classList.add('active');
             } catch (error) {
                 showMessage(false, 'Ошибка', error.message);
             }
+        }
+
+        async function submitEditReceipt() {
+            const formData = new FormData();
+
+            // Основные данные
+            formData.append('id',
+                document.getElementById('receipt-id').value);
+            formData.append('objectId',
+                document.getElementById('receipt-object-id').value);
+            formData.append('sellerObjectName',
+                document.getElementById('receipt-seller-object-name').value);
+            formData.append('quantity',
+                document.getElementById('receipt-quantity').value);
+            formData.append('sellerId',
+                document.getElementById('receipt-seller-id').value);
+            formData.append('themeId',
+                document.getElementById('receipt-theme-id').value);
+            formData.append('location',
+                document.getElementById('receipt-location').value);
+
+            // Номера и даты документов
+            formData.append('billNumber',
+                document.getElementById('receipt-bill-number').value);
+            formData.append('billDate',
+                document.getElementById('receipt-bill-date').value);
+            formData.append('invoiceNumber',
+                document.getElementById('receipt-invoice-number').value);
+            formData.append('invoiceDate',
+                document.getElementById('receipt-invoice-date').value);
+            formData.append('ecNumber',
+                document.getElementById('receipt-ec-number').value);
+            formData.append('ecDate',
+                document.getElementById('receipt-ec-date').value);
+
+            // Файлы документов
+            const billFile = document.getElementById('edit-bill-file');
+            if (billFile.files.length > 0) {
+                formData.append('editBillFile', billFile.files[0]);
+            }
+            const invoiceFile =
+                document.getElementById('edit-invoice-file');
+            if (invoiceFile.files.length > 0) {
+                formData.append('editInvoiceFile', invoiceFile.files[0]);
+            }
+            const ecFile = document.getElementById('edit-ec-file');
+            if (ecFile.files.length > 0) {
+                formData.append('editEcFile', ecFile.files[0]);
+            }
+
+            try {
+                const response = await fetch('/api/receipt', {
+                    method: 'PUT',
+                    body: formData
+                });
+                const result = await response.json();
+
+                closeReceiptModal();
+
+                if (result.error) {
+                    showMessage(false, 'Ошибка', result.error);
+                } else {
+                    showMessage(true, 'Успешно!', result.message);
+                    await refreshCurrentView();
+                }
+            } catch (error) {
+                showMessage(false, 'Ошибка', error.message);
+            }
+        }
+
+        function closeReceiptModal() {
+            document.getElementById('edit-receipt-modal').classList.remove('active');
         }
 
         async function handleReceiptSubmit(e) {
