@@ -81,21 +81,41 @@ class StorageManager:
         )
         return {'id': new_id}
 
-    def update_receipt(self, receipt_id, object_id, seller_object_name, seller_id,
-                       theme_id, location, quantity):
+    def update_receipt(self, receipt_id, object_id,
+                    seller_object_name, seller_id,
+                    theme_id, location, quantity,
+                    bill_number=None, bill_date=None,
+                    bill_file=None, bill_filename=None,
+                    invoice_number=None, invoice_date=None,
+                    invoice_file=None, invoice_filename=None,
+                    ec_number=None, ec_date=None,
+                    ec_file=None, ec_filename=None):
+        bill_binary = (
+            psycopg2.Binary(bill_file) if bill_file else None
+        )
+        invoice_binary = (
+            psycopg2.Binary(invoice_file) if invoice_file else None
+        )
+        ec_binary = (
+            psycopg2.Binary(ec_file) if ec_file else None
+        )
+
         result = self._db.call_function_scalar(
             'update_receipt',
-            (receipt_id, object_id, seller_object_name, seller_id,
-             theme_id, location, quantity)
+            (receipt_id, object_id, seller_object_name,
+            seller_id, theme_id, location, quantity,
+            bill_number, bill_date,
+            bill_binary, bill_filename,
+            invoice_number, invoice_date,
+            invoice_binary, invoice_filename,
+            ec_number, ec_date,
+            ec_binary, ec_filename)
         )
         return {'success': result}
 
     def delete_receipt(self, receipt_id):
         result = self._db.call_function_scalar('delete_receipt', (receipt_id,))
         return {'success': result}
-
-    # Writeoffs
-    # В классе StorageManager заменить методы writeoff:
 
     def create_writeoff(self, object_id, theme_id, quantity,
                     writeoff_date, file_data, filename):

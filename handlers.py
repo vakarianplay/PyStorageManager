@@ -418,7 +418,10 @@ class RequestHandler:
             'message': f'Тема "{name}" успешно обновлена'
         }
 
-    def update_receipt(self, fields, session_id=None):
+    def update_receipt(self, fields, files=None, session_id=None):
+        if files is None:
+            files = {}
+
         receipt_id = int(fields.get('id'))
         object_id = int(fields.get('objectId'))
         seller_object_name = fields.get('sellerObjectName')
@@ -427,31 +430,64 @@ class RequestHandler:
         location = fields.get('location')
         quantity = int(fields.get('quantity'))
 
-        # Получаем имя объекта для лога
+        bill_number = fields.get('billNumber') or None
+        bill_date = fields.get('billDate') or None
+        invoice_number = fields.get('invoiceNumber') or None
+        invoice_date = fields.get('invoiceDate') or None
+        ec_number = fields.get('ecNumber') or None
+        ec_date = fields.get('ecDate') or None
+
         obj = self.db.get_object_by_id(object_id)
         obj_name = obj['objectname'] if obj else str(object_id)
 
+        bill_info = files.get('editBillFile', {})
+        invoice_info = files.get('editInvoiceFile', {})
+        ec_info = files.get('editEcFile', {})
+
         self.manager.update_receipt(
             receipt_id, object_id, seller_object_name,
-            seller_id, theme_id, location, quantity
+            seller_id, theme_id, location, quantity,
+            bill_number, bill_date,
+            bill_info.get('data'), bill_info.get('filename'),
+            invoice_number, invoice_date,
+            invoice_info.get('data'), invoice_info.get('filename'),
+            ec_number, ec_date,
+            ec_info.get('data'), ec_info.get('filename')
         )
 
         if session_id:
-            # Получаем данные о документах
-            receipt = self.db.get_receipt_by_id(receipt_id)
             details_parts = [
                 f'Наименование: {seller_object_name}',
                 f'Кол-во: {quantity}'
             ]
-            if receipt:
-                if receipt.get('bill_number'):
-                    details_parts.append(
-                        f'Счёт: {receipt["bill_number"]}'
-                    )
-                if receipt.get('invoice_number'):
-                    details_parts.append(
-                        f'Накладная: {receipt["invoice_number"]}'
-                    )
+            if bill_number:
+                details_parts.append(f'Счёт: {bill_number}')
+            if invoice_number:
+                details_parts.append(
+                    f'Накладная: {invoice_number}'
+                )
+            if ec_number:
+                details_parts.append(
+                    f'Вх.контроль: {ec_number}'
+                )
+
+            updated_docs = []
+            if bill_info.get('data'):
+                updated_docs.append(
+                    f'Счёт: {bill_info["filename"]}'
+                )
+            if invoice_info.get('data'):
+                updated_docs.append(
+                    f'Накладная: {invoice_info["filename"]}'
+                )
+            if ec_info.get('data'):
+                updated_docs.append(
+                    f'Вх.контроль: {ec_info["filename"]}'
+                )
+            if updated_docs:
+                details_parts.append(
+                    'Обновлены файлы: ' + ', '.join(updated_docs)
+                )
 
             self._log(
                 session_id, 'Редактирование', 'Поступление',

@@ -401,7 +401,7 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     return
                 self.send_json_response(
                     self.handler.update_receipt(
-                        fields, session_id
+                        fields, files, session_id
                     )
                 )
             elif path == '/api/writeoff':
