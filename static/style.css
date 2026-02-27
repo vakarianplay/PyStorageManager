@@ -632,12 +632,16 @@ h1 {
     }
 
     .modal-buttons {
-        flex-direction: column;
+        display: flex;
+        gap: 10px;
+        justify-content: center;
+        margin-top: 20px;
     }
 
     .modal-buttons .btn {
-        width: 100%;
+        width: 10%;
     }
+
 }
 
 /* =====================
@@ -1284,4 +1288,137 @@ h1 {
 .page-info {
     font-size: 14px;
     color: #666;
+}
+
+/* =====================
+   MODAL WIDE
+   ===================== */
+
+.modal-wide {
+    max-width: 600px;
+}
+
+/* =====================
+   DOCUMENTS SECTION
+   ===================== */
+
+.documents-section {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.documents-section h4 {
+    margin: 0 0 15px 0;
+    color: #2c3e50;
+    font-size: 15px;
+}
+
+.doc-current {
+    margin-bottom: 5px;
+    font-size: 13px;
+    color: #495057;
+}
+
+.doc-current a {
+    color: #3498db;
+    text-decoration: none;
+}
+
+.doc-current a:hover {
+    text-decoration: underline;
+}
+
+.doc-hint {
+    display: block;
+    font-size: 12px;
+    color: #999;
+    margin-top: 2px;
+}
+
+/* =====================
+   MODAL SCROLLABLE
+   ===================== */
+
+.modal-overlay {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.modal-edit {
+    max-height: 90vh;
+    overflow-y: auto;
+    max-width: 550px;
+}
+
+.modal-wide {
+    max-width: 550px;
+}
+
+.documents-section {
+    margin-top: 15px;
+    padding: 12px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.documents-section h4 {
+    margin: 0 0 10px 0;
+    color: #2c3e50;
+    font-size: 14px;
+}
+
+.documents-section .form-group {
+    margin-bottom: 10px;
+}
+
+.doc-current {
+    margin-bottom: 3px;
+    font-size: 12px;
+    color: #495057;
+}
+
+.doc-hint {
+    display: block;
+    font-size: 11px;
+    color: #999;
+    margin-top: 1px;
+}
+
+.modal-edit .form-group {
+    margin-bottom: 10px;
+}
+
+.modal-edit .form-group label {
+    margin-bottom: 3px;
+    font-size: 13px;
+}
+
+.modal-edit .form-group input,
+.modal-edit .form-group select {
+    padding: 7px 10px;
+    font-size: 13px;
+}
+
+.modal-edit .modal-buttons {
+    margin-top: 15px;
+    position: sticky;
+    bottom: 0;
+    background: white;
+    padding: 10px 0 0 0;
+    border-top: 1px solid #eee;
+}
+
+.modal-footer-sticky {
+    padding: 15px 25px 20px;
+    border-top: 1px solid #eee;
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-shrink: 0;
+    background: white;
+    border-radius: 0 0 16px 16px;
 }
