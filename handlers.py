@@ -15,7 +15,6 @@ class RequestHandler:
     # ==================== LOGGING ====================
     def _log(self, session_id, action, entity_type,
              entity_id, entity_name, details=None):
-        """Записывает действие в лог."""
         user = self.session_manager.get_session(session_id)
         if user:
             self.db.add_log(
@@ -194,6 +193,17 @@ class RequestHandler:
         if not result or not result.get('file'):
             raise ValueError('File not found')
         return result
+    
+    def get_objects_filtered(self, filter_type):
+        self.db.update_storage_stats()
+        if filter_type == 'in_stock':
+            objects = self.db.get_objects_in_stock()
+        elif filter_type == 'written_off':
+            objects = self.db.get_objects_written_off()
+        else:
+            objects = self.db.get_all_objects()
+
+        return [dict(obj) for obj in objects]
 
     # ==================== SEARCH ====================
     def search_objects(self, search_type, search_value):
@@ -366,7 +376,6 @@ class RequestHandler:
             )
         }
 
-    # ==================== UPDATE (с логированием) ===========
     def update_object(self, fields, session_id=None):
         object_id = int(fields.get('id'))
         object_name = fields.get('objectName')

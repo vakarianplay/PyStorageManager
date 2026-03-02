@@ -99,7 +99,6 @@ class StorageManager:
         ec_binary = (
             psycopg2.Binary(ec_file) if ec_file else None
         )
-
         result = self._db.call_function_scalar(
             'update_receipt',
             (receipt_id, object_id, seller_object_name,
