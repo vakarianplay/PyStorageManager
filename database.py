@@ -230,3 +230,9 @@ class Database:
             'search_logs', (search_text, limit, offset),
             fetch=True
         )
+        
+    def get_objects_in_stock(self):
+        return self.call_function('get_objects_in_stock', fetch=True)
+
+    def get_objects_written_off(self):
+        return self.call_function('get_objects_written_off', fetch=True)

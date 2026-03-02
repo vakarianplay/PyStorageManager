@@ -263,7 +263,6 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                     self.send_json_response(result if result else {})
                 else:
                     self.send_json_response(self.handler.get_all_pricing())
-                    
             elif path == '/api/logs':
                 if not self.require_admin():
                     return
@@ -280,6 +279,23 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
                 self.send_json_response({
                     'logs': logs, 'total': count
                 })
+            
+            elif path == '/api/filtered':
+                filter_type = query.get('filter', ['all'])[0]
+                if filter_type == 'in_stock':
+                    self.send_json_response(
+                        self.handler.get_objects_filtered('in_stock')
+                    )
+                elif filter_type == 'written_off':
+                    self.send_json_response(
+                        self.handler.get_objects_filtered('written_off')
+                    )
+                else:
+                    self.send_json_response(
+                        self.handler.get_objects()
+                    )
+            
+                    
         except ValueError as e:
             self.send_error_json(str(e), 404)
         except Exception as e:
@@ -557,7 +573,6 @@ class StorageHTTPHandler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
-        # print(f"[{self.log_date_time_string()}] {args[0]}")
 
 def load_config(config_path='config.yaml'):
     with open(config_path, 'r', encoding='utf-8') as f:
